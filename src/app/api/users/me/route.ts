@@ -38,7 +38,8 @@ export async function PATCH(req: NextRequest) {
       .returning({ id: users.id, universityId: users.universityId, name: users.name });
 
     return NextResponse.json({ data: updated });
-  } catch {
+  } catch (err) {
+    console.error("[PATCH /api/users/me]", err);
     return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
   }
 }

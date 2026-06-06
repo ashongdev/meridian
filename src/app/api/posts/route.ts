@@ -1,11 +1,13 @@
 import { auth } from "@/lib/auth/config";
 import { db } from "@/lib/db/aurora-dsql";
 import { posts, users, courseMemberships } from "@/lib/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { rateLimit } from "@/lib/rate-limit";
+import { and, desc, eq, lt } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 const POST_TYPES = ["question", "discussion", "resource", "announcement"] as const;
+const MAX_LIMIT  = 30;
 
 const createSchema = z.object({
   courseId: z.string().uuid(),
@@ -14,7 +16,13 @@ const createSchema = z.object({
   content:  z.string().min(1).max(10000),
 });
 
-// GET /api/posts?courseId=&type=&limit=&cursor=
+/**
+ * GET /api/posts?courseId=&type=&limit=&cursor=
+ *
+ * Cursor-based pagination: cursor is the ISO timestamp of the last item received.
+ * First page: omit cursor. Subsequent pages: pass cursor from meta.nextCursor.
+ * Pinned posts are only returned on the first page (no cursor).
+ */
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -24,64 +32,96 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const courseId = searchParams.get("courseId");
   const type     = searchParams.get("type");
-  const limit    = Math.min(50, Number(searchParams.get("limit") ?? "20"));
+  const cursor   = searchParams.get("cursor");   // ISO timestamp
+  const limit    = Math.min(MAX_LIMIT, Math.max(1, Number(searchParams.get("limit") ?? "20")));
 
   if (!courseId) {
     return NextResponse.json({ error: "courseId is required" }, { status: 400 });
   }
 
-  const filters = [
-    eq(posts.courseId, courseId),
-    type && POST_TYPES.includes(type as typeof POST_TYPES[number])
-      ? eq(posts.type, type)
-      : undefined,
-  ].filter(Boolean) as Parameters<typeof and>;
+  const typeFilter = type && POST_TYPES.includes(type as typeof POST_TYPES[number])
+    ? eq(posts.type, type)
+    : undefined;
+
+  const select = {
+    id:           posts.id,
+    type:         posts.type,
+    title:        posts.title,
+    content:      posts.content,
+    isPinned:     posts.isPinned,
+    upvoteCount:  posts.upvoteCount,
+    commentCount: posts.commentCount,
+    createdAt:    posts.createdAt,
+    authorId:     posts.authorId,
+    authorName:   users.name,
+    authorAvatar: users.avatarUrl,
+  };
 
   try {
-    const rows = await db
-      .select({
-        id:           posts.id,
-        type:         posts.type,
-        title:        posts.title,
-        content:      posts.content,
-        isPinned:     posts.isPinned,
-        upvoteCount:  posts.upvoteCount,
-        commentCount: posts.commentCount,
-        createdAt:    posts.createdAt,
-        authorId:     posts.authorId,
-        authorName:   users.name,
-        authorAvatar: users.avatarUrl,
-      })
-      .from(posts)
-      .leftJoin(users, eq(users.id, posts.authorId))
-      .where(and(...filters))
-      .orderBy(desc(posts.isPinned), desc(posts.createdAt))
-      .limit(limit);
+    const [pinnedRows, regularRows] = await Promise.all([
+      // Pinned posts: only on first page (no cursor)
+      cursor
+        ? Promise.resolve([])
+        : db.select(select)
+            .from(posts)
+            .leftJoin(users, eq(users.id, posts.authorId))
+            .where(and(eq(posts.courseId, courseId), eq(posts.isPinned, true), typeFilter))
+            .orderBy(desc(posts.createdAt))
+            .limit(5),
 
-    return NextResponse.json({ data: rows });
-  } catch {
+      // Regular posts: cursor-paginated
+      db.select(select)
+        .from(posts)
+        .leftJoin(users, eq(users.id, posts.authorId))
+        .where(and(
+          eq(posts.courseId, courseId),
+          eq(posts.isPinned, false),
+          typeFilter,
+          cursor ? lt(posts.createdAt, new Date(cursor)) : undefined,
+        ))
+        .orderBy(desc(posts.createdAt))
+        .limit(limit + 1), // fetch one extra to detect hasMore
+    ]);
+
+    const hasMore    = regularRows.length > limit;
+    const pageItems  = hasMore ? regularRows.slice(0, limit) : regularRows;
+    const nextCursor = hasMore ? pageItems[pageItems.length - 1].createdAt.toISOString() : null;
+    const data       = [...pinnedRows, ...pageItems];
+
+    return NextResponse.json({ data, meta: { nextCursor, hasMore } });
+  } catch (err) {
+    console.error("[GET /api/posts]", err);
     return NextResponse.json({ error: "Failed to fetch posts" }, { status: 500 });
   }
 }
 
-// POST /api/posts — create a post (must be enrolled)
+/**
+ * POST /api/posts
+ * Auth required. Must be enrolled in the course.
+ */
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json().catch(() => null);
+  const userId = session.user.id;
+  const { limited, retryAfter } = rateLimit(`post:${userId}`, 10, 60_000);
+  if (limited) {
+    return NextResponse.json({ error: "Too many requests" }, {
+      status: 429, headers: { "Retry-After": String(retryAfter) },
+    });
+  }
+
+  const body   = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input", issues: parsed.error.issues }, { status: 400 });
   }
 
   const { courseId, type, title, content } = parsed.data;
-  const userId = session.user.id;
 
   try {
-    // Verify enrollment
     const [membership] = await db
       .select({ id: courseMemberships.id })
       .from(courseMemberships)
@@ -96,7 +136,8 @@ export async function POST(req: NextRequest) {
       .returning();
 
     return NextResponse.json({ data: post }, { status: 201 });
-  } catch {
+  } catch (err) {
+    console.error("[POST /api/posts]", err);
     return NextResponse.json({ error: "Failed to create post" }, { status: 500 });
   }
 }

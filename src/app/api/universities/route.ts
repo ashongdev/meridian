@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
       .limit(limit);
 
     return NextResponse.json({ data: rows });
-  } catch {
+  } catch (err) {
+    console.error("[GET /api/universities]", err);
     return NextResponse.json({ error: "Failed to fetch universities" }, { status: 500 });
   }
 }

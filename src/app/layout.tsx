@@ -43,6 +43,7 @@ export default function RootLayout({
 		<html
 			lang="en"
 			className={`${syne.variable} ${fraunces.variable} ${inter.variable} h-full`}
+			suppressHydrationWarning
 		>
 			<style precedence="default" href="root-fonts">{`
         :root {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { StarDot } from "@/components/ui/academic-accents";
 
@@ -8,22 +8,36 @@ type University = { id: string; name: string; slug: string; country: string };
 type Course = {
   id: string; code: string; slug: string; title: string;
   memberCount: number; materialCount: number;
-  universityId: string; uniName: string; uniSlug: string; uniCountry: string;
+  universityId: string; uniName: string; uniSlug: string;
 };
 
-/* ── helpers ── */
-async function fetchUniversities(q: string): Promise<University[]> {
-  const res = await fetch(`/api/universities?q=${encodeURIComponent(q)}&limit=30`);
-  const json = await res.json();
-  return json.data ?? [];
-}
-async function fetchCourses(universityId: string | null, q: string): Promise<Course[]> {
-  const params = new URLSearchParams({ limit: "30" });
-  if (universityId) params.set("universityId", universityId);
-  if (q)           params.set("q", q);
-  const res = await fetch(`/api/courses?${params}`);
-  const json = await res.json();
-  return json.data ?? [];
+/* ── Debounced fetch with AbortController ─────────────────────────────────── */
+function useDebouncedFetch<T>(
+  buildUrl: (q: string) => string,
+  onResult: (data: T[]) => void,
+  delay = 350
+) {
+  const timerRef  = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const abortRef  = useRef<AbortController | null>(null);
+
+  return useCallback(
+    (q: string) => {
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(async () => {
+        abortRef.current?.abort();
+        abortRef.current = new AbortController();
+        try {
+          const res  = await fetch(buildUrl(q), { signal: abortRef.current.signal });
+          const json = await res.json();
+          onResult(json.data ?? []);
+        } catch (e) {
+          if ((e as Error).name !== "AbortError") console.error(e);
+        }
+      }, delay);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [buildUrl, onResult, delay]
+  );
 }
 
 export default function ExplorePage() {
@@ -34,26 +48,25 @@ export default function ExplorePage() {
   const [courseQ, setCourseQ]         = useState("");
   const [enrolling, setEnrolling]     = useState<string | null>(null);
   const [enrolled, setEnrolled]       = useState<Set<string>>(new Set());
-  const uniDebounce = useRef<ReturnType<typeof setTimeout>>(null);
-  const courseDebounce = useRef<ReturnType<typeof setTimeout>>(null);
 
-  // Initial load
-  useEffect(() => { fetchUniversities("").then(setUnis); }, []);
-  useEffect(() => { fetchCourses(selectedUni?.id ?? null, "").then(setCourses); }, [selectedUni]);
+  const searchUnis = useDebouncedFetch<University>(
+    (q) => `/api/universities?q=${encodeURIComponent(q)}&limit=30`,
+    setUnis
+  );
 
-  function onUniSearch(q: string) {
-    setUniQ(q);
-    clearTimeout(uniDebounce.current!);
-    uniDebounce.current = setTimeout(() => fetchUniversities(q).then(setUnis), 300);
-  }
+  const searchCourses = useDebouncedFetch<Course>(
+    (q) => {
+      const p = new URLSearchParams({ limit: "20" });
+      if (selectedUni) p.set("universityId", selectedUni.id);
+      if (q) p.set("q", q);
+      return `/api/courses?${p}`;
+    },
+    setCourses
+  );
 
-  function onCourseSearch(q: string) {
-    setCourseQ(q);
-    clearTimeout(courseDebounce.current!);
-    courseDebounce.current = setTimeout(
-      () => fetchCourses(selectedUni?.id ?? null, q).then(setCourses), 300
-    );
-  }
+  // Initial loads
+  useEffect(() => { searchUnis(""); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { searchCourses(""); }, [selectedUni]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function enroll(courseId: string) {
     setEnrolling(courseId);
@@ -70,7 +83,7 @@ export default function ExplorePage() {
   return (
     <div className="min-h-screen px-6 sm:px-10 pt-10 pb-20">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="mb-10">
         <div className="chapter-label mb-3">Explore</div>
         <h1 className="font-display font-extrabold text-ink leading-none"
@@ -85,21 +98,18 @@ export default function ExplorePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8">
 
-        {/* ── University column ───────────────────────────────────────────── */}
+        {/* ── University column ──────────────────────────────────────────────── */}
         <div>
           <div className="chapter-label mb-4">Universities</div>
-
-          {/* Search */}
           <input
             type="search"
             value={uniQ}
-            onChange={(e) => onUniSearch(e.target.value)}
+            onChange={(e) => { setUniQ(e.target.value); searchUnis(e.target.value); }}
             placeholder="Search universities…"
             className="w-full bg-surface border border-border text-ink text-sm font-body px-3 py-2 rounded-lg mb-4 focus:outline-none focus:border-teal/60 placeholder:text-ink-3"
           />
 
           <div className="space-y-1">
-            {/* All */}
             <button
               onClick={() => setSelectedUni(null)}
               className={`w-full text-left px-3 py-2 rounded-lg text-xs font-body transition-colors ${
@@ -110,9 +120,7 @@ export default function ExplorePage() {
             </button>
 
             {unis.map((u) => (
-              <button
-                key={u.id}
-                onClick={() => { setSelectedUni(u); setCourseQ(""); }}
+              <button key={u.id} onClick={() => { setSelectedUni(u); setCourseQ(""); }}
                 className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
                   selectedUni?.id === u.id
                     ? "bg-teal/10 text-teal"
@@ -123,28 +131,21 @@ export default function ExplorePage() {
                 <p className="text-xs font-body text-ink-3">{u.country}</p>
               </button>
             ))}
-
-            {unis.length === 0 && (
-              <p className="text-xs font-body text-ink-3 px-3 py-4">No universities found.</p>
-            )}
           </div>
         </div>
 
-        {/* ── Courses column ──────────────────────────────────────────────── */}
+        {/* ── Courses column ────────────────────────────────────────────────── */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <div className="chapter-label">
-              {selectedUni ? selectedUni.name : "All Courses"}
-            </div>
+            <div className="chapter-label">{selectedUni ? selectedUni.name : "All Courses"}</div>
             <span className="text-xs font-body text-ink-3">{courses.length} courses</span>
           </div>
 
-          {/* Search */}
           <input
             type="search"
             value={courseQ}
-            onChange={(e) => onCourseSearch(e.target.value)}
-            placeholder="Search courses…"
+            onChange={(e) => { setCourseQ(e.target.value); searchCourses(e.target.value); }}
+            placeholder={selectedUni ? `Search ${selectedUni.name} courses…` : "Pick a university to search courses"}
             className="w-full bg-surface border border-border text-ink text-sm font-body px-3 py-2 rounded-lg mb-5 focus:outline-none focus:border-teal/60 placeholder:text-ink-3"
           />
 
@@ -153,22 +154,14 @@ export default function ExplorePage() {
               const isEnrolled = enrolled.has(c.id);
               const tilts = ["", "sm:translate-y-1", "sm:-translate-y-1"];
               return (
-                <div
-                  key={c.id}
+                <div key={c.id}
                   className={`group relative bg-surface border border-border rounded-xl p-4 transition-all hover:border-teal/30 ${tilts[i % tilts.length]}`}
                 >
-                  {/* Code badge */}
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-mono text-teal bg-teal/10 px-2 py-0.5 rounded">
-                      {c.code}
-                    </span>
+                    <span className="text-xs font-mono text-teal bg-teal/10 px-2 py-0.5 rounded">{c.code}</span>
                     <span className="text-xs font-body text-ink-3">{c.uniName}</span>
                   </div>
-
-                  <p className="font-display font-semibold text-ink text-sm leading-snug line-clamp-2 mb-3">
-                    {c.title}
-                  </p>
-
+                  <p className="font-display font-semibold text-ink text-sm leading-snug line-clamp-2 mb-3">{c.title}</p>
                   <div className="flex items-center gap-3 text-xs font-body text-ink-3 mb-4">
                     <span className="flex items-center gap-1">
                       <StarDot className="w-2.5 h-2.5 text-teal" />
@@ -176,12 +169,9 @@ export default function ExplorePage() {
                     </span>
                     <span>{c.materialCount} files</span>
                   </div>
-
                   <div className="flex gap-2">
-                    <Link
-                      href={`/${c.uniSlug}/${c.slug}`}
-                      className="flex-1 text-center text-xs font-body text-ink-2 border border-border hover:border-teal/40 hover:text-teal px-3 py-1.5 rounded-lg transition-colors"
-                    >
+                    <Link href={`/${c.uniSlug}/${c.slug}`}
+                      className="flex-1 text-center text-xs font-body text-ink-2 border border-border hover:border-teal/40 hover:text-teal px-3 py-1.5 rounded-lg transition-colors">
                       View
                     </Link>
                     <button
@@ -202,11 +192,9 @@ export default function ExplorePage() {
 
             {courses.length === 0 && (
               <div className="col-span-full py-16 text-center">
-                <p className="font-serif italic text-ink-2 text-lg mb-2">
-                  &ldquo;No courses found.&rdquo;
-                </p>
+                <p className="font-serif italic text-ink-2 text-lg mb-2">&ldquo;No courses found.&rdquo;</p>
                 <p className="text-xs font-body text-ink-3">
-                  Try a different search or pick another university.
+                  {selectedUni ? "Try a different search term." : "Select a university to browse its courses."}
                 </p>
               </div>
             )}

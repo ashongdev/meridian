@@ -7,8 +7,9 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 
-// Aurora DSQL limitations: no ENUM types, no foreign key constraints.
-// Enum columns use plain text; FK relationships enforced at application level.
+// Aurora DSQL limitations: no ENUM types, no foreign key constraints, no sync CREATE INDEX.
+// Indexes are created separately via scripts/apply-indexes.ts (CREATE INDEX ASYNC).
+// FK relationships enforced at application level.
 
 const now = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
 

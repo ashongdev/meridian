@@ -12,6 +12,7 @@
     "db:apply": "tsx --env-file=.env.local scripts/apply-schema.ts",
     "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
     "db:migrate": "tsx --env-file=.env.local scripts/migrate.ts",
+    "db:indexes": "tsx --env-file=.env.local scripts/apply-indexes.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "@aws-sdk/credential-providers": "^3.1063.0",
     "@aws-sdk/lib-dynamodb": "^3.1063.0",
     "@aws-sdk/rds-signer": "^3.1063.0",
+    "@vercel/blob": "^2.4.0",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.7",

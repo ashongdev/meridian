@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth/config";
 import { db } from "@/lib/db/aurora-dsql";
 import { comments, posts, users, courseMemberships } from "@/lib/db/schema";
+import { rateLimit } from "@/lib/rate-limit";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -31,27 +32,35 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       })
       .from(comments)
       .leftJoin(users, eq(users.id, comments.authorId))
-      .where(and(eq(comments.postId, postId)))
+      .where(eq(comments.postId, postId))
       .orderBy(asc(comments.createdAt))
       .limit(100);
 
     return NextResponse.json({ data: rows });
-  } catch {
+  } catch (err) {
+    console.error("[GET /api/posts/[id]/comments]", err);
     return NextResponse.json({ error: "Failed to fetch comments" }, { status: 500 });
   }
 }
 
-// POST /api/posts/[id]/comments — create a comment (must be enrolled in the course)
+// POST /api/posts/[id]/comments — create a comment (must be enrolled)
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id: postId } = await params;
   const userId = session.user.id;
+  const { limited, retryAfter } = rateLimit(`comment:${userId}`, 20, 60_000);
+  if (limited) {
+    return NextResponse.json({ error: "Too many requests" }, {
+      status: 429, headers: { "Retry-After": String(retryAfter) },
+    });
+  }
 
-  const body = await req.json().catch(() => null);
+  const { id: postId } = await params;
+
+  const body   = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input", issues: parsed.error.issues }, { status: 400 });
@@ -76,12 +85,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .values({ postId, authorId: userId, content: parsed.data.content })
       .returning();
 
-    await db.update(posts)
+    // Fire-and-forget — do not block the response
+    db.update(posts)
       .set({ commentCount: sql`${posts.commentCount} + 1` })
-      .where(eq(posts.id, postId));
+      .where(eq(posts.id, postId))
+      .catch((err) => console.error("[POST /comments] commentCount increment failed:", err));
 
     return NextResponse.json({ data: comment }, { status: 201 });
-  } catch {
+  } catch (err) {
+    console.error("[POST /api/posts/[id]/comments]", err);
     return NextResponse.json({ error: "Failed to create comment" }, { status: 500 });
   }
 }

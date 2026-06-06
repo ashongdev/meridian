@@ -1,15 +1,28 @@
 import { db } from "@/lib/db/aurora-dsql";
 import { courses, universities } from "@/lib/db/schema";
-import { and, eq, ilike, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
+// Global unscoped search returns fewer results (Rule 3: no unbounded global scans)
+const SCOPED_LIMIT   = 50;
+const UNSCOPED_LIMIT = 10;
+
+/**
+ * GET /api/courses?universityId=&q=&page=&limit=
+ *
+ * When universityId is provided: full search within that university (up to 50).
+ * Without universityId: global search is limited to 10 results to prevent
+ * full-table scans across all universities (Rule 3 compliance).
+ */
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const universityId = searchParams.get("universityId");
   const q            = searchParams.get("q")?.trim() ?? "";
   const page         = Math.max(1, Number(searchParams.get("page") ?? "1"));
-  const limit        = Math.min(50, Number(searchParams.get("limit") ?? "20"));
-  const offset       = (page - 1) * limit;
+
+  const maxLimit = universityId ? SCOPED_LIMIT : UNSCOPED_LIMIT;
+  const limit    = Math.min(maxLimit, Number(searchParams.get("limit") ?? "20"));
+  const offset   = (page - 1) * limit;
 
   const filters = [
     universityId ? eq(courses.universityId, universityId) : undefined,
@@ -34,7 +47,7 @@ export async function GET(req: NextRequest) {
         .from(courses)
         .leftJoin(universities, eq(universities.id, courses.universityId))
         .where(filters.length ? and(...filters) : undefined)
-        .orderBy(courses.memberCount)
+        .orderBy(desc(courses.memberCount))
         .limit(limit)
         .offset(offset),
 
@@ -45,9 +58,10 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       data: rows,
-      meta: { total, page, limit },
+      meta: { total, page, limit, scoped: !!universityId },
     });
-  } catch {
+  } catch (err) {
+    console.error("[GET /api/courses]", err);
     return NextResponse.json({ error: "Failed to fetch courses" }, { status: 500 });
   }
 }

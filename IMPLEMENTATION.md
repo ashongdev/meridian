@@ -19,29 +19,30 @@
 
 ### Database Stack (3-tier polyglot — judge-facing story)
 
-| Layer | Service | Why |
-|---|---|---|
-| Primary relational | Aurora DSQL | Globally distributed active-active PostgreSQL; zero-downtime scale; fits Track 3 "million-scale" requirement |
-| AI/Vector search | Aurora PostgreSQL + pgvector | Cosine similarity for RAG; stays in the AWS ecosystem; co-located with embeddings |
-| Real-time / events | DynamoDB | High-throughput writes for presence, activity feeds, notifications; TTL-based session cleanup |
+| Layer              | Service                      | Why                                                                                                          |
+| ------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Primary relational | Aurora DSQL                  | Globally distributed active-active PostgreSQL; zero-downtime scale; fits Track 3 "million-scale" requirement |
+| AI/Vector search   | Aurora PostgreSQL + pgvector | Cosine similarity for RAG; stays in the AWS ecosystem; co-located with embeddings                            |
+| Real-time / events | DynamoDB                     | High-throughput writes for presence, activity feeds, notifications; TTL-based session cleanup                |
 
 ### Application Stack
 
-| Layer | Service |
-|---|---|
-| Frontend + API | Next.js App Router on Vercel |
-| File storage | Vercel Blob |
-| Rate limiting | Upstash Redis |
-| AI responses | Claude API via Vercel AI SDK |
+| Layer              | Service                                    |
+| ------------------ | ------------------------------------------ |
+| Frontend + API     | Next.js App Router on Vercel               |
+| File storage       | Vercel Blob                                |
+| Rate limiting      | Upstash Redis                              |
+| AI responses       | Claude API via Vercel AI SDK               |
 | Document ingestion | Python AWS Lambda (async, fire-and-forget) |
-| Auth | NextAuth v5 (Google OAuth) |
-| ORM | Drizzle ORM |
+| Auth               | NextAuth v5 (Google OAuth)                 |
+| ORM                | Drizzle ORM                                |
 
 ---
 
 ## Milestone Plan
 
 ### M1 — Foundation `Jun 6–8` ✓ COMPLETE
+
 **Goal:** Deployed app with auth, DB connection, and landing page live.
 
 - [x] Next.js 16 project scaffold
@@ -60,6 +61,7 @@
 ---
 
 ### M2 — Core Community `Jun 9–12`
+
 **Goal:** Students can register, find their university/course, enroll, post, and upload materials.
 
 - [ ] `/register` page — university selection + course search
@@ -78,9 +80,11 @@
 ---
 
 ### M3 — AI Tutor `Jun 13–17`
+
 **Goal:** Students can upload materials and ask questions grounded in their course content.
 
 #### Python Lambda — Document Ingestion Pipeline
+
 - [ ] `lambda/ingest/handler.py` — receives webhook from `/api/materials`
 - [ ] PDF text extraction (PyMuPDF / pdfminer)
 - [ ] Chunking strategy — 512 tokens, 64-token overlap, preserve section headers
@@ -89,6 +93,7 @@
 - [ ] Deploy Lambda with boto3, set env vars for RDS connection
 
 #### RAG API Route
+
 - [ ] `GET /api/ai/[courseId]/chat` — streaming response endpoint
 - [ ] Embed the user's query
 - [ ] Cosine similarity search against `material_embeddings` for that course (top-5 chunks)
@@ -97,6 +102,7 @@
 - [ ] Store session in `ai_sessions` (DynamoDB for fast write, Aurora for audit)
 
 #### AI Tutor UI
+
 - [ ] `/[university]/[course]/ai` — full chat interface
 - [ ] Streaming message bubbles
 - [ ] Source citations — link each AI answer back to the material chunk it came from
@@ -106,27 +112,32 @@
 ---
 
 ### M4 — Study Groups + Real-Time `Jun 18–22`
+
 **Goal:** Students can form study groups, track presence, and use a shared Pomodoro timer.
 
 #### Study Groups
+
 - [ ] `/[university]/[course]/groups` — list + create study groups
 - [ ] `POST /api/groups` — create group (name, max size, schedule, description)
 - [ ] `POST /api/groups/[id]/join` and `/leave`
 - [ ] Group detail page — member list, chat, shared session timer
 
 #### Real-Time Presence (DynamoDB + SSE)
+
 - [ ] DynamoDB `presence` table — `{ userId, courseId, status, ttl }` (TTL = 5 min, refreshed on ping)
 - [ ] `GET /api/presence/[courseId]` — SSE stream, emits member counts every 10s
 - [ ] Client heartbeat — ping every 60s to refresh TTL
 - [ ] Online member count badge on course tab bar
 
 #### Shared Pomodoro Timer
+
 - [ ] DynamoDB `study_sessions` table — timer state per group
 - [ ] `POST /api/groups/[id]/timer` — start/pause/reset (only group owner)
 - [ ] SSE stream for timer state synced across group members
 - [ ] 25/5 Pomodoro cycle with visual countdown
 
 #### Notifications
+
 - [ ] DynamoDB `notifications` table — `{ userId, type, data, read, createdAt }`
 - [ ] Notification types: new post in enrolled course, new material uploaded, AI answer ready
 - [ ] `GET /api/notifications` — unread count + latest 20
@@ -135,9 +146,11 @@
 ---
 
 ### M5 — Monetization + Polish `Jun 23–26`
+
 **Goal:** Freemium working, promo code for judges, UI polished.
 
 #### Billing
+
 - [ ] `/billing` page — Free vs Pro comparison
 - [ ] Promo code redemption — `POST /api/promo/redeem` with code `MERIDIAN-JUDGE`
 - [ ] `MERIDIAN-JUDGE` unlocks Pro for 30 days (hardcoded in table)
@@ -145,6 +158,7 @@
 - [ ] Usage tracking — AI query count per day stored in DynamoDB
 
 #### Polish Pass
+
 - [ ] Empty states for every page (no courses enrolled, no materials, no posts)
 - [ ] Loading skeletons for course feed and materials list
 - [ ] Error boundaries for API failures
@@ -155,6 +169,7 @@
 ---
 
 ### M6 — Seed + Demo Prep `Jun 27–29`
+
 **Goal:** Real content seeded, judges can evaluate immediately after signup.
 
 - [ ] Seed 5 real universities (Ghana, UCT, Makerere, Lagos, KNUST)
@@ -280,12 +295,12 @@ LAMBDA_INGEST_SECRET=        # HMAC secret to verify webhook
 
 ## Judging Criteria Alignment
 
-| Criterion (25% each) | How Meridian wins |
-|---|---|
-| **Technical Implementation** | 3-tier polyglot DB with clear rationale; Aurora DSQL active-active global distribution; pgvector RAG pipeline; DynamoDB for high-throughput events; Python Lambda async ingestion |
-| **Design** | Editorial magazine-style layouts (not a template); asymmetric collage composition; warm earthy palette with single teal accent; Syne + Fraunces + Inter editorial type stack; WhatsApp-native mobile patterns |
-| **Impact & Real-World Applicability** | Solves a real pain point (scattered academic resources) for a genuinely underserved market (African universities); monetization model is realistic ($3-5/mo Pro); seeded with real content from real courses |
-| **Originality** | No equivalent product exists for African universities; the 3-DB architecture is motivated by actual use-case requirements, not over-engineering; "AI that passed the course" framing is distinctive |
+| Criterion (25% each)                  | How Meridian wins                                                                                                                                                                                             |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Technical Implementation**          | 3-tier polyglot DB with clear rationale; Aurora DSQL active-active global distribution; pgvector RAG pipeline; DynamoDB for high-throughput events; Python Lambda async ingestion                             |
+| **Design**                            | Editorial magazine-style layouts (not a template); asymmetric collage composition; warm earthy palette with single teal accent; Syne + Fraunces + Inter editorial type stack; WhatsApp-native mobile patterns |
+| **Impact & Real-World Applicability** | Solves a real pain point (scattered academic resources) for a genuinely underserved market (African universities); monetization model is realistic ($3-5/mo Pro); seeded with real content from real courses  |
+| **Originality**                       | No equivalent product exists for African universities; the 3-DB architecture is motivated by actual use-case requirements, not over-engineering; "AI that passed the course" framing is distinctive           |
 
 ---
 

@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth/config";
 import { db } from "@/lib/db/aurora-dsql";
 import { posts, upvotes } from "@/lib/db/schema";
+import { rateLimit } from "@/lib/rate-limit";
 import { and, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -11,8 +12,15 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id: postId } = await params;
   const userId = session.user.id;
+  const { limited, retryAfter } = rateLimit(`vote:${userId}`, 60, 60_000);
+  if (limited) {
+    return NextResponse.json({ error: "Too many requests" }, {
+      status: 429, headers: { "Retry-After": String(retryAfter) },
+    });
+  }
+
+  const { id: postId } = await params;
 
   try {
     const [post] = await db.select({ id: posts.id, upvoteCount: posts.upvoteCount })
@@ -27,22 +35,20 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       .limit(1);
 
     if (existing) {
-      // Remove vote
       await db.delete(upvotes).where(eq(upvotes.id, existing.id));
       await db.update(posts)
         .set({ upvoteCount: sql`greatest(${posts.upvoteCount} - 1, 0)` })
         .where(eq(posts.id, postId));
-      const newCount = Math.max(post.upvoteCount - 1, 0);
-      return NextResponse.json({ data: { voted: false, count: newCount } });
+      return NextResponse.json({ data: { voted: false, count: Math.max(post.upvoteCount - 1, 0) } });
     } else {
-      // Add vote
       await db.insert(upvotes).values({ userId, targetType: "post", targetId: postId });
       await db.update(posts)
         .set({ upvoteCount: sql`${posts.upvoteCount} + 1` })
         .where(eq(posts.id, postId));
       return NextResponse.json({ data: { voted: true, count: post.upvoteCount + 1 } });
     }
-  } catch {
+  } catch (err) {
+    console.error("[POST /api/posts/[id]/vote]", err);
     return NextResponse.json({ error: "Failed to vote" }, { status: 500 });
   }
 }
