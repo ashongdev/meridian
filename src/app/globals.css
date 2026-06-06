@@ -1,26 +1,270 @@
 @import "tailwindcss";
 
+/* ─── Tailwind v4 theme — direct hex values, no var() references ─────────── */
+/* @theme (not inline) so tokens are both in :root AND inlined in utilities   */
+@theme {
+	/* Background / surface hierarchy */
+	--color-paper: #0c0a07;
+	--color-surface: #141109;
+	--color-surface-2: #1c1810;
+	--color-surface-3: #252016;
+
+	/* Borders */
+	--color-border: #332d1f;
+	--color-border-2: #47402c;
+
+	/* Text */
+	--color-ink: #f0ead8;
+	--color-ink-2: #a89b80;
+	--color-ink-3: #665c42;
+
+	/* Accent — teal */
+	--color-teal: #0ec8b5;
+	--color-teal-dim: #0a9487;
+
+	/* Warm secondaries */
+	--color-amber: #eea020;
+	--color-coral: #e05a45;
+
+	/* Fonts — resolved at runtime via the layout <style> tag */
+	--font-display: "Syne", system-ui, sans-serif;
+	--font-serif: "Fraunces", Georgia, serif;
+	--font-body: "Inter", system-ui, sans-serif;
+	--font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+
+	/* Fluid type scale */
+	--text-display: clamp(3.5rem, 9vw, 8rem);
+	--text-headline: clamp(2rem, 4.5vw, 4rem);
+	--text-title: clamp(1.25rem, 2.5vw, 2rem);
+}
+
+/* ─── CSS custom properties for non-Tailwind use (inline styles, etc.) ────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+	--paper: #0c0a07;
+	--surface: #141109;
+	--surface-2: #1c1810;
+	--surface-3: #252016;
+	--border: #332d1f;
+	--border-2: #47402c;
+	--ink: #f0ead8;
+	--ink-2: #a89b80;
+	--ink-3: #665c42;
+	--teal: #0ec8b5;
+	--teal-dim: #0a9487;
+	--teal-glow: rgba(14, 200, 181, 0.15);
+	--amber: #eea020;
+	--coral: #e05a45;
+	--grain-opacity: 0.032;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ─── Reset ───────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+	/* box-sizing: border-box; */
+	/* margin: 0;
+  padding: 0; */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+	background: #0c0a07;
+	color: #f0ead8;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	scroll-behavior: smooth;
+	overflow-x: hidden;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+	background: #0c0a07;
+	color: #f0ead8;
+	position: relative;
+	font-family: "Inter", system-ui, sans-serif;
+}
+
+/* Film grain overlay */
+body::before {
+	content: "";
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	z-index: 9999;
+	opacity: var(--grain-opacity);
+	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+	background-size: 256px 256px;
+}
+
+/* ─── Typography utilities ────────────────────────────────────────────────── */
+.font-display {
+	font-family: var(--font-display, "Syne", system-ui, sans-serif);
+}
+.font-serif {
+	font-family: var(--font-serif, "Fraunces", Georgia, serif);
+}
+.font-body {
+	font-family: var(--font-body, "Inter", system-ui, sans-serif);
+}
+.font-mono {
+	font-family: var(--font-mono, "JetBrains Mono", ui-monospace, monospace);
+}
+
+.text-display {
+	font-size: clamp(3.5rem, 9vw, 8rem);
+	line-height: 0.92;
+	letter-spacing: -0.03em;
+}
+.text-headline {
+	font-size: clamp(2rem, 4.5vw, 4rem);
+	line-height: 1;
+	letter-spacing: -0.025em;
+}
+.text-title {
+	font-size: clamp(1.25rem, 2.5vw, 2rem);
+	line-height: 1.1;
+	letter-spacing: -0.02em;
+}
+
+/* Chapter label */
+.chapter-label {
+	font-family: "Inter", system-ui, sans-serif;
+	font-size: 0.65rem;
+	font-weight: 600;
+	letter-spacing: 0.2em;
+	text-transform: uppercase;
+	color: #0ec8b5;
+}
+
+/* ─── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+	width: 5px;
+	height: 5px;
+}
+::-webkit-scrollbar-track {
+	background: #141109;
+}
+::-webkit-scrollbar-thumb {
+	background: #332d1f;
+	border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: #0a9487;
+}
+
+/* ─── Selection ───────────────────────────────────────────────────────────── */
+::selection {
+	background: rgba(14, 200, 181, 0.15);
+	color: #0ec8b5;
+}
+
+/* ─── Marquee ─────────────────────────────────────────────────────────────── */
+@keyframes marquee-left {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(-50%);
+	}
+}
+@keyframes marquee-right {
+	from {
+		transform: translateX(-50%);
+	}
+	to {
+		transform: translateX(0);
+	}
+}
+
+.marquee-track {
+	display: flex;
+	width: max-content;
+	animation: marquee-left 28s linear infinite;
+}
+.marquee-track-rev {
+	display: flex;
+	width: max-content;
+	animation: marquee-right 32s linear infinite;
+}
+.marquee-track:hover,
+.marquee-track-rev:hover {
+	animation-play-state: paused;
+}
+
+/* ─── Decorative shapes ───────────────────────────────────────────────────── */
+.diagonal-cut {
+	clip-path: polygon(0 0, 100% 0, 100% 88%, 0 100%);
+	padding-bottom: 8%;
+}
+.diagonal-cut-top {
+	clip-path: polygon(0 6%, 100% 0, 100% 100%, 0 100%);
+	padding-top: 8%;
+}
+
+/* ─── Glow card ───────────────────────────────────────────────────────────── */
+.glow-card {
+	box-shadow:
+		0 0 0 1px #332d1f,
+		0 0 40px -8px rgba(14, 200, 181, 0.15);
+	transition: box-shadow 0.3s ease;
+}
+.glow-card:hover {
+	box-shadow:
+		0 0 0 1px #0a9487,
+		0 0 60px -4px rgba(14, 200, 181, 0.15);
+}
+
+/* ─── Collage / tilt cards ────────────────────────────────────────────────── */
+.tilt-1 {
+	transform: rotate(-1.5deg);
+}
+.tilt-2 {
+	transform: rotate(1.2deg);
+}
+.tilt-3 {
+	transform: rotate(-0.7deg);
+}
+
+.collage-card {
+	transition:
+		transform 0.25s ease,
+		box-shadow 0.25s ease;
+}
+.collage-card:hover {
+	transform: translateY(-4px) rotate(0deg) !important;
+	box-shadow:
+		0 20px 60px -10px rgba(0, 0, 0, 0.5),
+		0 0 0 1px #0a9487;
+}
+
+/* ─── Floating CTA ────────────────────────────────────────────────────────── */
+.floating-cta {
+	position: fixed;
+	bottom: 2rem;
+	right: 2rem;
+	z-index: 200;
+	transition:
+		transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+		opacity 0.2s ease;
+}
+.floating-cta.hidden-cta {
+	transform: translateY(120%);
+	opacity: 0;
+	pointer-events: none;
+}
+@media (max-width: 640px) {
+	.floating-cta {
+		bottom: 1.25rem;
+		right: 50%;
+		transform: translateX(50%);
+	}
+	.floating-cta.hidden-cta {
+		transform: translateX(50%) translateY(120%);
+		opacity: 0;
+	}
+}
+
+/* ─── Focus ring ──────────────────────────────────────────────────────────── */
+:focus-visible {
+	outline: 2px solid #0ec8b5;
+	outline-offset: 3px;
+	border-radius: 4px;
 }
