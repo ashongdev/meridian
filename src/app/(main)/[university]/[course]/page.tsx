@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth/config";
-import { db } from "@/lib/db/aurora-dsql";
+import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { courses, universities, courseMemberships, posts, materials, users } from "@/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
@@ -16,6 +16,7 @@ export default async function CourseHubPage({ params, searchParams }: Props) {
   const { university: uniSlug, course: courseSlug } = await params;
   const { tab = "wall" } = await searchParams;
 
+  await ensureDb();
   const session = await auth();
   const userId = session?.user?.id;
 

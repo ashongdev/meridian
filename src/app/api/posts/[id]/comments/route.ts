@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth/config";
-import { db } from "@/lib/db/aurora-dsql";
+import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { comments, posts, users, courseMemberships } from "@/lib/db/schema";
 import { rateLimit } from "@/lib/rate-limit";
 import { and, asc, eq, sql } from "drizzle-orm";
@@ -12,6 +12,7 @@ const createSchema = z.object({
 
 // GET /api/posts/[id]/comments
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  await ensureDb();
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -45,6 +46,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 // POST /api/posts/[id]/comments — create a comment (must be enrolled)
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  await ensureDb();
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

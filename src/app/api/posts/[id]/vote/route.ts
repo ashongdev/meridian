@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth/config";
-import { db } from "@/lib/db/aurora-dsql";
+import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { posts, upvotes } from "@/lib/db/schema";
 import { rateLimit } from "@/lib/rate-limit";
 import { and, eq, sql } from "drizzle-orm";
@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 // POST /api/posts/[id]/vote — toggle upvote
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  await ensureDb();
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

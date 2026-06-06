@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import { db } from "@/lib/db/aurora-dsql";
+import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -30,6 +30,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account }) {
       if (!user.email || account?.provider !== "google") return false;
 
+      await ensureDb();
       try {
         const existing = await db
           .select({ id: users.id })
@@ -69,6 +70,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session }) {
       if (!session.user?.email) return session;
 
+      await ensureDb();
       try {
         const [dbUser] = await db
           .select({

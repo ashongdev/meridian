@@ -1,9 +1,10 @@
-import { db } from "@/lib/db/aurora-dsql";
+import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { universities } from "@/lib/db/schema";
 import { ilike } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
+  await ensureDb();
   const { searchParams } = req.nextUrl;
   const q     = searchParams.get("q")?.trim() ?? "";
   const limit = Math.min(50, Number(searchParams.get("limit") ?? "30"));

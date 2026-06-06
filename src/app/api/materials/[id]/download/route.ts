@@ -1,11 +1,12 @@
 import { auth } from "@/lib/auth/config";
-import { db } from "@/lib/db/aurora-dsql";
+import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { materials, courseMemberships } from "@/lib/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
 // GET /api/materials/[id]/download — enrollment check then redirect to file
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  await ensureDb();
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth/config";
-import { db } from "@/lib/db/aurora-dsql";
+import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { courses, courseMemberships, materials, users } from "@/lib/db/schema";
 import { rateLimit } from "@/lib/rate-limit";
 import { and, desc, eq, lt, sql } from "drizzle-orm";
@@ -26,6 +26,7 @@ const createSchema = z.object({
  * Returns metadata only — no file content ever in the response (Rule 4).
  */
 export async function GET(req: NextRequest) {
+  await ensureDb();
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -88,6 +89,7 @@ export async function GET(req: NextRequest) {
  * Supports multipart (file) or JSON (fileUrl). Never returns file content.
  */
 export async function POST(req: NextRequest) {
+  await ensureDb();
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

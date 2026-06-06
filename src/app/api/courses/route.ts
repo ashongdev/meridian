@@ -1,4 +1,4 @@
-import { db } from "@/lib/db/aurora-dsql";
+import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { courses, universities } from "@/lib/db/schema";
 import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
@@ -15,6 +15,7 @@ const UNSCOPED_LIMIT = 10;
  * full-table scans across all universities (Rule 3 compliance).
  */
 export async function GET(req: NextRequest) {
+  await ensureDb();
   const { searchParams } = req.nextUrl;
   const universityId = searchParams.get("universityId");
   const q            = searchParams.get("q")?.trim() ?? "";

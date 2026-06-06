@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth/config";
-import { db } from "@/lib/db/aurora-dsql";
+import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { posts, users, courseMemberships } from "@/lib/db/schema";
 import { rateLimit } from "@/lib/rate-limit";
 import { and, desc, eq, lt } from "drizzle-orm";
@@ -24,6 +24,7 @@ const createSchema = z.object({
  * Pinned posts are only returned on the first page (no cursor).
  */
 export async function GET(req: NextRequest) {
+  await ensureDb();
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -100,6 +101,7 @@ export async function GET(req: NextRequest) {
  * Auth required. Must be enrolled in the course.
  */
 export async function POST(req: NextRequest) {
+  await ensureDb();
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

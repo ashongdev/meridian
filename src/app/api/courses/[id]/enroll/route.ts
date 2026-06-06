@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth/config";
-import { db } from "@/lib/db/aurora-dsql";
+import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { courses, courseMemberships } from "@/lib/db/schema";
 import { rateLimit } from "@/lib/rate-limit";
 import { and, eq, sql } from "drizzle-orm";
@@ -9,6 +9,7 @@ type Params = { params: Promise<{ id: string }> };
 
 // POST /api/courses/[id]/enroll — join a course
 export async function POST(_req: NextRequest, { params }: Params) {
+  await ensureDb();
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -56,6 +57,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
 // DELETE /api/courses/[id]/enroll — leave a course
 export async function DELETE(_req: NextRequest, { params }: Params) {
+  await ensureDb();
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
