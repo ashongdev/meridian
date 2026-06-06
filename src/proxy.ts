@@ -19,6 +19,20 @@ export const proxy = auth((req) => {
     return NextResponse.redirect(url);
   }
 
+  // Redirect authenticated users with no university set to onboarding
+  // (skip: already on onboarding, API routes, or public paths)
+  if (
+    req.auth &&
+    !req.auth.user?.universityId &&
+    pathname !== "/onboarding" &&
+    !pathname.startsWith("/api/") &&
+    !isPublic
+  ) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/onboarding";
+    return NextResponse.redirect(url);
+  }
+
   return NextResponse.next();
 });
 
