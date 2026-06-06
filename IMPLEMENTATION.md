@@ -41,7 +41,7 @@
 
 ## Milestone Plan
 
-### M1 — Foundation `Jun 6–8` ← IN PROGRESS
+### M1 — Foundation `Jun 6–8` ✓ COMPLETE
 **Goal:** Deployed app with auth, DB connection, and landing page live.
 
 - [x] Next.js 16 project scaffold
@@ -53,9 +53,9 @@
 - [x] Editorial landing page — 6-chapter story layout
 - [x] Sidebar navigation (desktop + mobile bottom nav)
 - [x] Design system — warm earthy palette, Syne + Fraunces + Inter, marquee, collage cards
-- [ ] Deploy to Vercel (connect Aurora DSQL + DynamoDB env vars)
-- [ ] Verify Google OAuth callback works on production domain
-- [ ] `scripts/migrate.ts` — run Drizzle migrations against Aurora DSQL
+- [x] Deploy to Vercel (connect Aurora DSQL + DynamoDB env vars)
+- [x] Verify Google OAuth callback works on production domain
+- [x] `scripts/apply-schema.ts` — 12 tables live on Aurora DSQL (enums/FKs stripped; Aurora DSQL limitation)
 
 ---
 

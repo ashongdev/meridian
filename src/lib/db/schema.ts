@@ -5,22 +5,10 @@ import {
   integer,
   boolean,
   timestamp,
-  pgEnum,
 } from "drizzle-orm/pg-core";
 
-/* ── Enums ───────────────────────────────────────────────────────────────── */
-export const materialTypeEnum = pgEnum("material_type", [
-  "past_exam", "notes", "syllabus", "textbook_chapter", "other",
-]);
-export const postTypeEnum = pgEnum("post_type", [
-  "question", "discussion", "resource", "announcement",
-]);
-export const memberRoleEnum = pgEnum("member_role", [
-  "member", "moderator", "admin",
-]);
-export const embeddingStatusEnum = pgEnum("embedding_status", [
-  "pending", "processing", "done", "failed",
-]);
+// Aurora DSQL limitations: no ENUM types, no foreign key constraints.
+// Enum columns use plain text; FK relationships enforced at application level.
 
 const now = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
 
@@ -40,7 +28,7 @@ export const users = pgTable("users", {
   email:        text("email").notNull().unique(),
   name:         text("name"),
   avatarUrl:    text("avatar_url"),
-  universityId: uuid("university_id").references(() => universities.id),
+  universityId: uuid("university_id"),
   isPro:        boolean("is_pro").default(false).notNull(),
   trialEndsAt:  timestamp("trial_ends_at", { withTimezone: true }),
   karmaScore:   integer("karma_score").default(0).notNull(),
@@ -49,34 +37,36 @@ export const users = pgTable("users", {
 
 /* ── Courses ──────────────────────────────────────────────────────────────── */
 export const courses = pgTable("courses", {
-  id:           uuid("id").defaultRandom().primaryKey(),
-  universityId: uuid("university_id").notNull().references(() => universities.id),
-  code:         text("code").notNull(),
-  slug:         text("slug").notNull(),
-  title:        text("title").notNull(),
-  description:  text("description"),
-  yearLevel:    integer("year_level"),
-  memberCount:  integer("member_count").default(0).notNull(),
+  id:            uuid("id").defaultRandom().primaryKey(),
+  universityId:  uuid("university_id").notNull(),
+  code:          text("code").notNull(),
+  slug:          text("slug").notNull(),
+  title:         text("title").notNull(),
+  description:   text("description"),
+  yearLevel:     integer("year_level"),
+  memberCount:   integer("member_count").default(0).notNull(),
   materialCount: integer("material_count").default(0).notNull(),
-  createdAt:    now(),
+  createdAt:     now(),
 });
 
 /* ── Course memberships ───────────────────────────────────────────────────── */
 export const courseMemberships = pgTable("course_memberships", {
   id:       uuid("id").defaultRandom().primaryKey(),
-  userId:   uuid("user_id").notNull().references(() => users.id),
-  courseId: uuid("course_id").notNull().references(() => courses.id),
-  role:     memberRoleEnum("role").default("member").notNull(),
+  userId:   uuid("user_id").notNull(),
+  courseId: uuid("course_id").notNull(),
+  // "member" | "moderator" | "admin"
+  role:     text("role").default("member").notNull(),
   joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 /* ── Materials ────────────────────────────────────────────────────────────── */
 export const materials = pgTable("materials", {
   id:              uuid("id").defaultRandom().primaryKey(),
-  courseId:        uuid("course_id").notNull().references(() => courses.id),
-  uploaderId:      uuid("uploader_id").references(() => users.id),
+  courseId:        uuid("course_id").notNull(),
+  uploaderId:      uuid("uploader_id"),
   title:           text("title").notNull(),
-  type:            materialTypeEnum("type").notNull(),
+  // "past_exam" | "notes" | "syllabus" | "textbook_chapter" | "other"
+  type:            text("type").notNull(),
   fileUrl:         text("file_url").notNull(),
   fileSize:        integer("file_size"),
   mimeType:        text("mime_type"),
@@ -86,7 +76,8 @@ export const materials = pgTable("materials", {
   isAnonymous:     boolean("is_anonymous").default(false).notNull(),
   upvoteCount:     integer("upvote_count").default(0).notNull(),
   downloadCount:   integer("download_count").default(0).notNull(),
-  embeddingStatus: embeddingStatusEnum("embedding_status").default("pending").notNull(),
+  // "pending" | "processing" | "done" | "failed"
+  embeddingStatus: text("embedding_status").default("pending").notNull(),
   createdAt:       now(),
   updatedAt:       timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   deletedAt:       timestamp("deleted_at", { withTimezone: true }),
@@ -95,9 +86,10 @@ export const materials = pgTable("materials", {
 /* ── Posts ────────────────────────────────────────────────────────────────── */
 export const posts = pgTable("posts", {
   id:           uuid("id").defaultRandom().primaryKey(),
-  courseId:     uuid("course_id").notNull().references(() => courses.id),
-  authorId:     uuid("author_id").references(() => users.id),
-  type:         postTypeEnum("type").default("discussion").notNull(),
+  courseId:     uuid("course_id").notNull(),
+  authorId:     uuid("author_id"),
+  // "question" | "discussion" | "resource" | "announcement"
+  type:         text("type").default("discussion").notNull(),
   title:        text("title"),
   content:      text("content").notNull(),
   isPinned:     boolean("is_pinned").default(false).notNull(),
@@ -111,8 +103,8 @@ export const posts = pgTable("posts", {
 /* ── Comments ─────────────────────────────────────────────────────────────── */
 export const comments = pgTable("comments", {
   id:          uuid("id").defaultRandom().primaryKey(),
-  postId:      uuid("post_id").notNull().references(() => posts.id),
-  authorId:    uuid("author_id").references(() => users.id),
+  postId:      uuid("post_id").notNull(),
+  authorId:    uuid("author_id"),
   content:     text("content").notNull(),
   upvoteCount: integer("upvote_count").default(0).notNull(),
   createdAt:   now(),
@@ -123,8 +115,8 @@ export const comments = pgTable("comments", {
 /* ── Study groups ─────────────────────────────────────────────────────────── */
 export const studyGroups = pgTable("study_groups", {
   id:          uuid("id").defaultRandom().primaryKey(),
-  courseId:    uuid("course_id").notNull().references(() => courses.id),
-  createdBy:   uuid("created_by").notNull().references(() => users.id),
+  courseId:    uuid("course_id").notNull(),
+  createdBy:   uuid("created_by").notNull(),
   name:        text("name").notNull(),
   description: text("description"),
   maxSize:     integer("max_size").default(8).notNull(),
@@ -136,18 +128,19 @@ export const studyGroups = pgTable("study_groups", {
 /* ── Study group members ──────────────────────────────────────────────────── */
 export const studyGroupMembers = pgTable("study_group_members", {
   id:       uuid("id").defaultRandom().primaryKey(),
-  groupId:  uuid("group_id").notNull().references(() => studyGroups.id),
-  userId:   uuid("user_id").notNull().references(() => users.id),
-  role:     memberRoleEnum("role").default("member").notNull(),
+  groupId:  uuid("group_id").notNull(),
+  userId:   uuid("user_id").notNull(),
+  // "member" | "moderator" | "admin"
+  role:     text("role").default("member").notNull(),
   joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 /* ── AI sessions ──────────────────────────────────────────────────────────── */
 export const aiSessions = pgTable("ai_sessions", {
   id:        uuid("id").defaultRandom().primaryKey(),
-  userId:    uuid("user_id").notNull().references(() => users.id),
-  courseId:  uuid("course_id").notNull().references(() => courses.id),
-  messages:  text("messages").default("[]").notNull(), // JSON array
+  userId:    uuid("user_id").notNull(),
+  courseId:  uuid("course_id").notNull(),
+  messages:  text("messages").default("[]").notNull(),
   createdAt: now(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -166,8 +159,9 @@ export const promoCodes = pgTable("promo_codes", {
 /* ── Upvotes ──────────────────────────────────────────────────────────────── */
 export const upvotes = pgTable("upvotes", {
   id:         uuid("id").defaultRandom().primaryKey(),
-  userId:     uuid("user_id").notNull().references(() => users.id),
-  targetType: text("target_type").notNull(), // "post" | "comment" | "material"
+  userId:     uuid("user_id").notNull(),
+  // "post" | "comment" | "material"
+  targetType: text("target_type").notNull(),
   targetId:   uuid("target_id").notNull(),
   createdAt:  now(),
 });

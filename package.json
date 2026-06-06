@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "tsx --env-file=.env.local scripts/db-push.ts",
+    "db:apply": "tsx --env-file=.env.local scripts/apply-schema.ts",
+    "db:migrate": "tsx --env-file=.env.local scripts/migrate.ts",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1063.0",
