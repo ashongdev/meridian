@@ -1,6 +1,4 @@
-"use client";
-
-import { signIn } from "next-auth/react";
+import { signIn } from "@/lib/auth/config";
 import Link from "next/link";
 import { NoteLines, StarDot, TealUnderline } from "@/components/ui/academic-accents";
 
@@ -117,16 +115,23 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Google sign-in */}
-          <button
-            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-            className="w-full flex items-center justify-center gap-3 bg-surface-2 border border-border-2 hover:border-teal/40 hover:bg-surface-3 text-ink rounded-xl px-5 py-4 transition-all font-body font-medium text-sm group"
-            style={{ boxShadow: "0 1px 0 0 rgba(255,255,255,0.04) inset" }}
+          {/* Google sign-in — server action avoids client-side CSRF token dance */}
+          <form
+            action={async () => {
+              "use server";
+              await signIn("google", { redirectTo: "/dashboard" });
+            }}
           >
-            <GoogleIcon className="w-5 h-5 shrink-0" />
-            <span>Continue with Google</span>
-            <span className="ml-auto text-ink-3 group-hover:text-teal transition-colors">→</span>
-          </button>
+            <button
+              type="submit"
+              className="w-full flex items-center justify-center gap-3 bg-surface-2 border border-border-2 hover:border-teal/40 hover:bg-surface-3 text-ink rounded-xl px-5 py-4 transition-all font-body font-medium text-sm group"
+              style={{ boxShadow: "0 1px 0 0 rgba(255,255,255,0.04) inset" }}
+            >
+              <GoogleIcon className="w-5 h-5 shrink-0" />
+              <span>Continue with Google</span>
+              <span className="ml-auto text-ink-3 group-hover:text-teal transition-colors">→</span>
+            </button>
+          </form>
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-6">

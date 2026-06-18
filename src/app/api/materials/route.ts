@@ -16,7 +16,7 @@ const createSchema = z.object({
   type:         z.enum(MATERIAL_TYPES),
   academicYear: z.string().max(20).optional(),
   isAnonymous:  z.boolean().default(false),
-  fileUrl:      z.string().url().optional(),
+  fileUrl:      z.url().optional(),
 });
 
 /**
@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
   let fileSize: number | undefined;
   let mimeType: string | undefined;
   let sha256: string | undefined;
+  let uploadBuffer: Buffer | undefined;
   let meta: z.infer<typeof createSchema>;
 
   if (contentType.includes("multipart/form-data")) {
@@ -130,9 +131,9 @@ export async function POST(req: NextRequest) {
     meta = parsed.data;
 
     if (file) {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      sha256   = createHash("sha256").update(buffer).digest("hex");
-      fileSize = buffer.length;
+      uploadBuffer = Buffer.from(await file.arrayBuffer());
+      sha256   = createHash("sha256").update(uploadBuffer).digest("hex");
+      fileSize = uploadBuffer.length;
       mimeType = file.type;
       fileName = file.name;
 
@@ -146,22 +147,29 @@ export async function POST(req: NextRequest) {
       }
 
       const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
-      if (!blobToken) {
-        return NextResponse.json(
-          { error: "File upload unavailable. Use fileUrl field to link an existing file." },
-          { status: 503 }
-        );
-      }
-      try {
-        const { put } = await import("@vercel/blob");
-        const blob = await put(`materials/${meta.courseId}/${sha256}/${fileName}`, buffer, {
-          access: "public",
-          token:  blobToken,
-        });
-        fileUrl = blob.url;
-      } catch (err) {
-        console.error("[POST /api/materials] blob upload failed:", err);
-        return NextResponse.json({ error: "File storage unavailable" }, { status: 503 });
+      if (blobToken) {
+        try {
+          const { put } = await import("@vercel/blob");
+          const blob = await put(`materials/${meta.courseId}/${sha256}/${fileName}`, uploadBuffer!, {
+            access: "public",
+            token:  blobToken,
+          });
+          fileUrl = blob.url;
+        } catch (err) {
+          console.error("[POST /api/materials] blob upload failed:", err);
+          return NextResponse.json({ error: "File storage unavailable" }, { status: 503 });
+        }
+      } else {
+        // Local dev fallback — save to ./local-uploads/ and serve via /api/uploads
+        const { writeFile, mkdir } = await import("fs/promises");
+        const { join } = await import("path");
+        const dir = join(process.cwd(), "local-uploads", "materials", meta.courseId, sha256!);
+        await mkdir(dir, { recursive: true });
+        await writeFile(join(dir, fileName!), uploadBuffer!);
+        const origin = req.headers.get("origin") ?? req.headers.get("x-forwarded-proto")
+          ? `${req.headers.get("x-forwarded-proto")}://${req.headers.get("host")}`
+          : `http://${req.headers.get("host") ?? "localhost:3000"}`;
+        fileUrl = `${origin}/api/uploads/materials/${meta.courseId}/${sha256}/${fileName}`;
       }
     }
   } else {
@@ -201,6 +209,17 @@ export async function POST(req: NextRequest) {
         isAnonymous:  meta.isAnonymous,
       })
       .returning();
+
+    // Trigger embedding ingestion fire-and-forget (pass buffer when available to skip re-fetch)
+    import("@/lib/ai/ingest").then(({ ingestMaterial }) =>
+      ingestMaterial({
+        id: material.id,
+        courseId: material.courseId,
+        fileUrl: material.fileUrl,
+        mimeType: material.mimeType,
+        buffer: uploadBuffer,
+      })
+    ).catch((err) => console.error("[POST /api/materials] ingest failed:", err));
 
     // Side effects fire-and-forget — do not block the response
     Promise.all([

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 type Material = {
   id: string; title: string; type: string; academicYear: string | null;
@@ -25,6 +25,9 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const ACCEPTED = ".pdf,.doc,.docx,.ppt,.pptx,.txt,.md";
+const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
+
 export function PapersTab({
   courseId,
   isEnrolled,
@@ -38,40 +41,98 @@ export function PapersTab({
   const [filter, setFilter]       = useState("all");
   const [uploading, setUploading] = useState(false);
   const [showForm, setShowForm]   = useState(false);
+  const [uploadMode, setUploadMode] = useState<"file" | "url">("file");
+  const [error, setError]         = useState<string | null>(null);
 
-  // Upload form state
+  // Shared form state
   const [uploadTitle, setUploadTitle]   = useState("");
   const [uploadType, setUploadType]     = useState("past_exam");
   const [uploadYear, setUploadYear]     = useState("");
   const [uploadAnon, setUploadAnon]     = useState(false);
-  const [uploadUrl, setUploadUrl]       = useState("");
+
+  // File mode
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [dragOver, setDragOver]         = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // URL mode
+  const [uploadUrl, setUploadUrl] = useState("");
 
   const filtered = filter === "all"
     ? materials
     : materials.filter((m) => m.type === filter);
 
+  function handleFileSelect(file: File) {
+    if (file.size > MAX_FILE_BYTES) {
+      setError(`File too large — max 50 MB (yours is ${formatBytes(file.size)})`);
+      return;
+    }
+    setError(null);
+    setSelectedFile(file);
+    if (!uploadTitle) {
+      // Auto-fill title from filename (strip extension)
+      setUploadTitle(file.name.replace(/\.[^.]+$/, ""));
+    }
+  }
+
+  function resetForm() {
+    setShowForm(false);
+    setUploadTitle(""); setUploadYear(""); setUploadUrl("");
+    setSelectedFile(null); setError(null); setUploadAnon(false);
+    setUploadType("past_exam"); setUploadMode("file");
+  }
+
   async function submitUpload(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
+
+    if (uploadMode === "file" && !selectedFile) {
+      setError("Please select a file to upload.");
+      return;
+    }
+    if (uploadMode === "url" && !uploadUrl.trim()) {
+      setError("Please enter a file URL.");
+      return;
+    }
+
     setUploading(true);
     try {
-      const res = await fetch("/api/materials", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          courseId,
-          title:        uploadTitle,
-          type:         uploadType,
-          academicYear: uploadYear || undefined,
-          isAnonymous:  uploadAnon,
-          fileUrl:      uploadUrl,
-        }),
-      });
+      let res: Response;
+
+      if (uploadMode === "file" && selectedFile) {
+        const fd = new FormData();
+        fd.append("file",         selectedFile);
+        fd.append("courseId",     courseId);
+        fd.append("title",        uploadTitle);
+        fd.append("type",         uploadType);
+        fd.append("isAnonymous",  String(uploadAnon));
+        if (uploadYear) fd.append("academicYear", uploadYear);
+        res = await fetch("/api/materials", { method: "POST", body: fd });
+      } else {
+        res = await fetch("/api/materials", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            courseId,
+            title:        uploadTitle,
+            type:         uploadType,
+            academicYear: uploadYear || undefined,
+            isAnonymous:  uploadAnon,
+            fileUrl:      uploadUrl,
+          }),
+        });
+      }
+
       if (res.ok) {
         const { data } = await res.json();
         setMaterials([data, ...materials]);
-        setShowForm(false);
-        setUploadTitle(""); setUploadUrl(""); setUploadYear("");
+        resetForm();
+      } else {
+        const { error: msg } = await res.json().catch(() => ({ error: "Upload failed" }));
+        setError(msg ?? "Upload failed");
       }
+    } catch {
+      setError("Network error — please try again.");
     } finally {
       setUploading(false);
     }
@@ -94,7 +155,25 @@ export function PapersTab({
             </button>
           ) : (
             <form onSubmit={submitUpload} className="bg-surface border border-teal/30 rounded-xl p-5 space-y-4">
-              <div className="chapter-label">Upload material</div>
+              <div className="flex items-center justify-between">
+                <span className="chapter-label">Upload material</span>
+                {/* Mode toggle */}
+                <div className="flex bg-surface-2 border border-border rounded-lg p-0.5 gap-0.5">
+                  {(["file", "url"] as const).map((m) => (
+                    <button
+                      key={m} type="button"
+                      onClick={() => { setUploadMode(m); setError(null); }}
+                      className={`text-xs font-body px-3 py-1 rounded-md transition-all ${
+                        uploadMode === m
+                          ? "bg-teal text-paper font-bold"
+                          : "text-ink-3 hover:text-ink"
+                      }`}
+                    >
+                      {m === "file" ? "From device" : "Paste URL"}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <input
                 value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)}
@@ -125,18 +204,76 @@ export function PapersTab({
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-body text-ink-3 block mb-1">File URL</label>
-                <input
-                  value={uploadUrl} onChange={(e) => setUploadUrl(e.target.value)}
-                  placeholder="https://drive.google.com/…"
-                  type="url" required
-                  className="w-full bg-surface-2 border border-border text-ink text-sm font-body px-3 py-2 rounded-lg focus:outline-none focus:border-teal/50 placeholder:text-ink-3"
-                />
-                <p className="text-xs font-body text-ink-3 mt-1">
-                  Paste a public link (Google Drive, Dropbox, etc.)
+              {/* ── File drop zone ── */}
+              {uploadMode === "file" && (
+                <div>
+                  <label className="text-xs font-body text-ink-3 block mb-1">File</label>
+                  <input
+                    ref={fileInputRef} type="file" accept={ACCEPTED}
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleFileSelect(f);
+                    }}
+                  />
+                  {selectedFile ? (
+                    <div className="flex items-center gap-3 bg-surface-2 border border-teal/30 rounded-lg px-4 py-3">
+                      <span className="text-xl">📄</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-body text-ink truncate">{selectedFile.name}</p>
+                        <p className="text-xs font-body text-ink-3">{formatBytes(selectedFile.size)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                        className="text-ink-3 hover:text-ink text-lg leading-none transition-colors"
+                      >×</button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={(e) => {
+                        e.preventDefault(); setDragOver(false);
+                        const f = e.dataTransfer.files[0];
+                        if (f) handleFileSelect(f);
+                      }}
+                      className={`border-2 border-dashed rounded-lg px-4 py-8 text-center cursor-pointer transition-all ${
+                        dragOver
+                          ? "border-teal bg-teal/5"
+                          : "border-border hover:border-teal/40 hover:bg-surface-2"
+                      }`}
+                    >
+                      <p className="text-2xl mb-2">📂</p>
+                      <p className="text-sm font-body text-ink-2">
+                        Drop a file here or <span className="text-teal underline">browse</span>
+                      </p>
+                      <p className="text-xs font-body text-ink-3 mt-1">PDF, Word, PowerPoint, TXT · max 50 MB</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── URL input ── */}
+              {uploadMode === "url" && (
+                <div>
+                  <label className="text-xs font-body text-ink-3 block mb-1">File URL</label>
+                  <input
+                    value={uploadUrl} onChange={(e) => setUploadUrl(e.target.value)}
+                    placeholder="https://…"
+                    type="url"
+                    className="w-full bg-surface-2 border border-border text-ink text-sm font-body px-3 py-2 rounded-lg focus:outline-none focus:border-teal/50 placeholder:text-ink-3"
+                  />
+                  <p className="text-xs font-body text-ink-3 mt-1">Paste a direct download link (not a preview link)</p>
+                </div>
+              )}
+
+              {error && (
+                <p className="text-xs font-body text-red-400 bg-red-400/10 border border-red-400/20 px-3 py-2 rounded-lg">
+                  {error}
                 </p>
-              </div>
+              )}
 
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={uploadAnon} onChange={(e) => setUploadAnon(e.target.checked)}
@@ -145,7 +282,7 @@ export function PapersTab({
               </label>
 
               <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
-                <button type="button" onClick={() => setShowForm(false)}
+                <button type="button" onClick={resetForm}
                   className="text-xs font-body text-ink-3 hover:text-ink transition-colors">
                   Cancel
                 </button>
@@ -182,7 +319,6 @@ export function PapersTab({
           <div key={m.id}
             className="bg-surface border border-border hover:border-teal/30 rounded-xl p-4 transition-all group flex items-start gap-4">
 
-            {/* Icon */}
             <div className="w-10 h-10 rounded-lg bg-surface-2 border border-border flex items-center justify-center shrink-0 text-sm">
               {m.type === "past_exam" ? "📄" : m.type === "notes" ? "📝" : m.type === "syllabus" ? "📋" : "📚"}
             </div>

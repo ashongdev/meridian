@@ -1,8 +1,26 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import { cache } from "react";
 import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+
+// Deduplicates the user DB lookup across all auth() calls in the same request
+const getDbUser = cache(async (email: string) => {
+  await ensureDb();
+  const [user] = await db
+    .select({
+      id:          users.id,
+      isPro:       users.isPro,
+      karmaScore:  users.karmaScore,
+      universityId: users.universityId,
+      trialEndsAt: users.trialEndsAt,
+    })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  return user ?? null;
+});
 
 declare module "next-auth" {
   interface Session {
@@ -70,28 +88,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session }) {
       if (!session.user?.email) return session;
 
-      await ensureDb();
       try {
-        const [dbUser] = await db
-          .select({
-            id: users.id,
-            isPro: users.isPro,
-            karmaScore: users.karmaScore,
-            universityId: users.universityId,
-            trialEndsAt: users.trialEndsAt,
-          })
-          .from(users)
-          .where(eq(users.email, session.user.email))
-          .limit(1);
-
+        const dbUser = await getDbUser(session.user.email);
         if (dbUser) {
-          const trialActive = dbUser.trialEndsAt
-            ? dbUser.trialEndsAt > new Date()
-            : false;
-
-          session.user.id = dbUser.id;
-          session.user.isPro = dbUser.isPro || trialActive;
-          session.user.karmaScore = dbUser.karmaScore;
+          const trialActive = dbUser.trialEndsAt ? dbUser.trialEndsAt > new Date() : false;
+          session.user.id           = dbUser.id;
+          session.user.isPro        = dbUser.isPro || trialActive;
+          session.user.karmaScore   = dbUser.karmaScore;
           session.user.universityId = dbUser.universityId;
         }
       } catch {

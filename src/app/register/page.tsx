@@ -1,6 +1,4 @@
-"use client";
-
-import { signIn } from "next-auth/react";
+import { signIn } from "@/lib/auth/config";
 import Link from "next/link";
 import { StarDot, ArrowAccent, CircleAccent } from "@/components/ui/academic-accents";
 
@@ -172,9 +170,15 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Google sign-up */}
+          {/* Google sign-up — server action avoids client-side CSRF token dance */}
+          <form
+            action={async () => {
+              "use server";
+              await signIn("google", { redirectTo: "/dashboard" });
+            }}
+          >
           <button
-            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+            type="submit"
             className="w-full flex items-center justify-center gap-3 bg-teal text-paper rounded-xl px-5 py-4 transition-all font-body font-semibold text-sm hover:bg-teal-dim group"
             style={{
               boxShadow: "0 0 0 1px rgba(14,200,181,0.4), 0 8px 24px -4px rgba(14,200,181,0.35)",
@@ -184,6 +188,7 @@ export default function RegisterPage() {
             <span>Continue with Google</span>
             <span className="ml-auto group-hover:translate-x-0.5 transition-transform">→</span>
           </button>
+          </form>
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-5">

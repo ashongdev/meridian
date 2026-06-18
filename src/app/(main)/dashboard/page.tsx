@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth/config";
-import { db } from "@/lib/db/aurora-dsql";
+import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { courses, universities, courseMemberships, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import Link from "next/link";
@@ -54,6 +54,7 @@ async function getKarma(userId: string): Promise<number> {
 }
 
 export default async function DashboardPage() {
+  await ensureDb();
   const session = await auth();
   const firstName = session?.user?.name?.split(" ")[0] ?? "Student";
   const userId = session?.user?.id;
