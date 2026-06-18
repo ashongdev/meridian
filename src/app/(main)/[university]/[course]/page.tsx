@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/config";
 import { db, ensureDb } from "@/lib/db/aurora-dsql";
-import { courses, universities, courseMemberships, posts, materials, users } from "@/lib/db/schema";
+import { courses, universities, courseMemberships, posts, materials, users, studyGroups, studyGroupMembers } from "@/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -44,7 +44,7 @@ export default async function CourseHubPage({ params, searchParams }: Props) {
   const userId = session?.user?.id;
 
   // Fetch all tab data in parallel on first load — tab switches are client-side after this
-  const [enrollmentRow, wallPosts, papersList] = await Promise.all([
+  const [enrollmentRow, wallPosts, papersList, groupsList, memberGroupRows] = await Promise.all([
     userId
       ? db.select({ id: courseMemberships.id })
           .from(courseMemberships)
@@ -77,15 +77,34 @@ export default async function CourseHubPage({ params, searchParams }: Props) {
       .where(eq(materials.courseId, row.id))
       .orderBy(desc(materials.createdAt))
       .limit(50),
+
+    db.select({
+        id: studyGroups.id, name: studyGroups.name, description: studyGroups.description,
+        maxSize: studyGroups.maxSize, memberCount: studyGroups.memberCount,
+        scheduledAt: studyGroups.scheduledAt, createdAt: studyGroups.createdAt,
+        createdBy: studyGroups.createdBy, creatorName: users.name,
+      })
+      .from(studyGroups)
+      .leftJoin(users, eq(users.id, studyGroups.createdBy))
+      .where(eq(studyGroups.courseId, row.id))
+      .orderBy(desc(studyGroups.createdAt)),
+
+    userId
+      ? db.select({ groupId: studyGroupMembers.groupId })
+          .from(studyGroupMembers)
+          .innerJoin(studyGroups, eq(studyGroups.id, studyGroupMembers.groupId))
+          .where(and(eq(studyGroupMembers.userId, userId), eq(studyGroups.courseId, row.id)))
+      : Promise.resolve([]),
   ]);
 
   const isEnrolled = enrollmentRow.length > 0;
+  const memberGroupIds = memberGroupRows.map((r) => r.groupId);
 
   return (
     <div className="min-h-screen">
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
-      <div className="bg-surface border-b border-border px-6 sm:px-10 pt-10 pb-6">
+      <div className="bg-surface px-6 sm:px-10 pt-10 pb-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -123,18 +142,21 @@ export default async function CourseHubPage({ params, searchParams }: Props) {
 
           <EnrollButton courseId={row.id} isEnrolled={isEnrolled} />
         </div>
-
-        <CourseTabs
-          uniSlug={uniSlug}
-          courseSlug={courseSlug}
-          courseId={row.id}
-          courseCode={row.code}
-          isEnrolled={isEnrolled}
-          initialTab={tab}
-          wallPosts={wallPosts}
-          papersList={papersList}
-        />
       </div>
+
+      <CourseTabs
+        uniSlug={uniSlug}
+        courseSlug={courseSlug}
+        courseId={row.id}
+        courseCode={row.code}
+        isEnrolled={isEnrolled}
+        initialTab={tab}
+        userId={userId}
+        wallPosts={wallPosts}
+        papersList={papersList}
+        studyGroups={groupsList}
+        memberGroupIds={memberGroupIds}
+      />
     </div>
   );
 }

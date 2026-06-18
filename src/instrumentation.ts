@@ -4,6 +4,8 @@ export async function register() {
     // On machines without IPv6 routing, both attempts race and fail.
     // Force IPv4-only so fetch() can reliably reach Google OAuth endpoints.
     const { setGlobalDispatcher, Agent } = await import("undici");
-    setGlobalDispatcher(new Agent({ connect: { family: 4 } }));
+    // `family` is a valid Node net.connect option but missing from undici's published connect types
+    type AgentOptions = ConstructorParameters<typeof Agent>[0];
+    setGlobalDispatcher(new Agent({ connect: { family: 4 } } as AgentOptions));
   }
 }
