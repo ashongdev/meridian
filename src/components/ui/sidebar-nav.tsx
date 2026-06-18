@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { NotificationBell } from "./notification-bell";
 
 type User = {
   name?: string | null;
@@ -85,6 +86,7 @@ export function SidebarNav({ user }: { user: User }) {
                 {user?.email}
               </p>
             </div>
+            <NotificationBell />
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
               className="text-ink-3 hover:text-teal transition-colors flex-shrink-0"
@@ -117,6 +119,9 @@ export function SidebarNav({ user }: { user: User }) {
             </Link>
           );
         })}
+        <div className="flex flex-col items-center gap-1 px-3 py-1">
+          <NotificationBell />
+        </div>
         <button
           onClick={() => signOut({ callbackUrl: "/" })}
           className="flex flex-col items-center gap-1 px-3 py-1 rounded-lg text-ink-3 transition-colors"

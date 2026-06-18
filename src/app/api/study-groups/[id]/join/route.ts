@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth/config";
 import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { studyGroups, studyGroupMembers, courseMemberships } from "@/lib/db/schema";
 import { rateLimit } from "@/lib/rate-limit";
+import { writeNotification } from "@/lib/db/presence";
 import { and, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -28,8 +29,8 @@ export async function POST(_req: NextRequest, { params }: Params) {
   try {
     const [group] = await db
       .select({
-        id: studyGroups.id, courseId: studyGroups.courseId,
-        maxSize: studyGroups.maxSize, memberCount: studyGroups.memberCount,
+        id: studyGroups.id, courseId: studyGroups.courseId, name: studyGroups.name,
+        createdBy: studyGroups.createdBy, maxSize: studyGroups.maxSize, memberCount: studyGroups.memberCount,
       })
       .from(studyGroups)
       .where(eq(studyGroups.id, groupId))
@@ -64,6 +65,17 @@ export async function POST(_req: NextRequest, { params }: Params) {
     await db.update(studyGroups)
       .set({ memberCount: sql`${studyGroups.memberCount} + 1` })
       .where(eq(studyGroups.id, groupId));
+
+    // Fire-and-forget — notify the group creator someone joined (skip self-notify)
+    if (group.createdBy !== userId) {
+      writeNotification(group.createdBy, {
+        type: "group_join",
+        groupId,
+        groupName: group.name,
+        actorUserId: userId,
+        actorName: session.user.name ?? "Someone",
+      }).catch((err) => console.error("[POST /join] notification write failed:", err));
+    }
 
     return NextResponse.json(
       { data: { joined: true, memberCount: group.memberCount + 1 } },

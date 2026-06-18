@@ -38,6 +38,8 @@ const indexes = [
   "CREATE INDEX ASYNC IF NOT EXISTS study_groups_course_idx ON study_groups (course_id)",
   // study_group_members
   "CREATE INDEX ASYNC IF NOT EXISTS study_group_members_group_user_idx ON study_group_members (group_id, user_id)",
+  // group_messages
+  "CREATE INDEX ASYNC IF NOT EXISTS group_messages_group_created_idx ON group_messages (group_id, created_at)",
   // ai_sessions
   "CREATE INDEX ASYNC IF NOT EXISTS ai_sessions_user_course_idx ON ai_sessions (user_id, course_id)",
   // upvotes

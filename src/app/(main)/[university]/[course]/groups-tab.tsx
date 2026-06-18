@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatDistanceToNow, isFuture } from "date-fns";
+import { GroupLivePanel } from "./group-live-panel";
 
 type Group = {
   id: string; name: string; description: string | null;
@@ -28,6 +29,7 @@ export function GroupsTab({
   const [submitting, setSubmitting] = useState(false);
   const [busyId, setBusyId]   = useState<string | null>(null);
   const [error, setError]     = useState<string | null>(null);
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -209,26 +211,40 @@ export function GroupsTab({
                   </div>
                 </div>
 
-                {isEnrolled && !isCreator && (
-                  isMember ? (
+                <div className="flex items-center gap-2 shrink-0">
+                  {isMember && (
                     <button
-                      onClick={() => leaveGroup(g.id)}
-                      disabled={busyId === g.id}
-                      className="shrink-0 text-xs font-display font-bold px-4 py-2 rounded-full border border-border text-ink-2 hover:border-coral/40 hover:text-coral transition-colors disabled:opacity-50"
+                      onClick={() => setExpandedGroupId(expandedGroupId === g.id ? null : g.id)}
+                      className="text-xs font-display font-bold px-4 py-2 rounded-full border border-teal/30 text-teal hover:bg-teal/10 transition-colors"
                     >
-                      {busyId === g.id ? "…" : "Leave"}
+                      {expandedGroupId === g.id ? "Close" : "Open"}
                     </button>
-                  ) : (
-                    <button
-                      onClick={() => joinGroup(g.id)}
-                      disabled={busyId === g.id || isFull}
-                      className="shrink-0 text-xs font-display font-bold px-4 py-2 rounded-full bg-teal text-paper hover:bg-teal-dim transition-colors disabled:opacity-50"
-                    >
-                      {busyId === g.id ? "…" : isFull ? "Full" : "Join"}
-                    </button>
-                  )
-                )}
+                  )}
+                  {isEnrolled && !isCreator && (
+                    isMember ? (
+                      <button
+                        onClick={() => leaveGroup(g.id)}
+                        disabled={busyId === g.id}
+                        className="text-xs font-display font-bold px-4 py-2 rounded-full border border-border text-ink-2 hover:border-coral/40 hover:text-coral transition-colors disabled:opacity-50"
+                      >
+                        {busyId === g.id ? "…" : "Leave"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => joinGroup(g.id)}
+                        disabled={busyId === g.id || isFull}
+                        className="text-xs font-display font-bold px-4 py-2 rounded-full bg-teal text-paper hover:bg-teal-dim transition-colors disabled:opacity-50"
+                      >
+                        {busyId === g.id ? "…" : isFull ? "Full" : "Join"}
+                      </button>
+                    )
+                  )}
+                </div>
               </div>
+
+              {expandedGroupId === g.id && (
+                <GroupLivePanel groupId={g.id} currentUserId={userId} />
+              )}
             </article>
           );
         })}

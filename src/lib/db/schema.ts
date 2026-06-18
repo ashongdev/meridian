@@ -136,6 +136,15 @@ export const studyGroupMembers = pgTable("study_group_members", {
   joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/* ── Group messages ───────────────────────────────────────────────────────── */
+export const groupMessages = pgTable("group_messages", {
+  id:        uuid("id").defaultRandom().primaryKey(),
+  groupId:   uuid("group_id").notNull(),
+  userId:    uuid("user_id").notNull(),
+  content:   text("content").notNull(),
+  createdAt: now(),
+});
+
 /* ── AI sessions ──────────────────────────────────────────────────────────── */
 export const aiSessions = pgTable("ai_sessions", {
   id:        uuid("id").defaultRandom().primaryKey(),
