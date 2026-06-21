@@ -2,33 +2,32 @@
 
 ## System overview
 
-```
-                                  ┌─────────────────────┐
-                                  │   Browser (Next.js)  │
-                                  └──────────┬───────────┘
-                                             │
-                                  ┌──────────▼───────────┐
-                                  │  Next.js App Router   │
-                                  │  (Vercel, API routes)  │
-                                  └──┬───────┬───────┬────┘
-                  ┌──────────────────┘       │       └──────────────────┐
-                  │                          │                          │
-        ┌─────────▼─────────┐    ┌───────────▼───────────┐   ┌──────────▼──────────┐
-        │    Aurora DSQL      │    │  Postgres + pgvector   │   │      DynamoDB         │
-        │  (primary relational)│    │   (Supabase, RAG store) │   │ (presence, notifs)    │
-        │                      │    │                        │   │                       │
-        │ users, universities, │    │  material_chunks        │   │ GROUP#id / PRESENCE#u │
-        │ courses, posts,      │    │  (content + embedding   │   │ GROUP#id / POMODORO   │
-        │ materials, groups,   │    │   vector(384))          │   │ USER#id  / NOTIF#ts   │
-        │ group_messages,      │    └────────────────────────┘   └───────────────────────┘
-        │ ai_sessions, promo_*│
-        └──────────────────────┘
+```mermaid
+flowchart TD
+    Browser["Browser (Next.js)"] --> App["Next.js App Router<br/>(Vercel, API routes)"]
 
-        ┌──────────────────────┐    ┌────────────────────────┐
-        │     Vercel Blob       │    │   Gemini (via AI SDK)   │
-        │  (raw uploaded files) │    │  generation + local      │
-        │                       │    │  embedding model (RAG)   │
-        └──────────────────────┘    └────────────────────────┘
+    App --> Aurora
+    App --> Vector
+    App --> Dynamo
+    App --> Blob
+    App --> Gemini
+
+    subgraph Aurora["Aurora DSQL — primary relational"]
+        A1["users, universities, courses, posts,<br/>materials, groups, group_messages,<br/>ai_sessions, promo_*"]
+    end
+
+    subgraph Vector["Postgres + pgvector (Supabase) — RAG store"]
+        V1["material_chunks<br/>content + embedding vector(384)"]
+    end
+
+    subgraph Dynamo["DynamoDB — presence, notifications"]
+        D1["GROUP#id / PRESENCE#userId"]
+        D2["GROUP#id / POMODORO#STATE"]
+        D3["USER#id / NOTIF#timestamp"]
+    end
+
+    Blob["Vercel Blob<br/>(raw uploaded files)"]
+    Gemini["Gemini (via AI SDK)<br/>generation + local embedding model (RAG)"]
 ```
 
 ## Why three databases, not one
@@ -63,7 +62,7 @@ The local embedding model was a deliberate choice over a hosted embedding API: n
 
 No WebSocket infrastructure — `GET /api/study-groups/[id]/live` is a single `ReadableStream` (`text/event-stream`, native `EventSource` on the client) per connected member. Every ~2.5s it: re-writes the caller's own presence heartbeat, re-queries DynamoDB for the group's presence + Pomodoro state (diffed against the last-sent snapshot, only emitting an event on change), and queries `group_messages` in Aurora DSQL for rows newer than the last-seen cursor. Connection cleanup is wired to `req.signal`'s abort event so a closed tab stops the server-side interval instead of polling for the rest of the function's lifetime.
 
-The Pomodoro timer streams state *transitions* only (start/pause/reset), not a per-second tick — each client computes its own live countdown locally from `endsAt`. This cuts the poll payload to near-zero during a 25-minute session instead of pushing a tick every few seconds.
+The Pomodoro timer streams state _transitions_ only (start/pause/reset), not a per-second tick — each client computes its own live countdown locally from `endsAt`. This cuts the poll payload to near-zero during a 25-minute session instead of pushing a tick every few seconds.
 
 Presence "online" is computed from heartbeat recency (`lastSeenAt` within ~20s), not DynamoDB TTL deletion — TTL cleanup isn't instant enough to drive a live "who's online" indicator.
 
