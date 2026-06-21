@@ -1,7 +1,11 @@
 import { auth } from "@/lib/auth/config";
 import { NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/", "/login", "/register", "/api/auth"];
+// /api/test is the E2E auth-bypass endpoint — it has its own internal guards
+// (NODE_ENV + secret check, see src/app/api/test/login/route.ts) that make it
+// a no-op everywhere except local/test runs; exempting it here only lets an
+// unauthenticated request reach those guards instead of bouncing to /login.
+const PUBLIC_PATHS = ["/", "/login", "/register", "/api/auth", "/api/test"];
 
 export const proxy = auth((req) => {
   const { pathname } = req.nextUrl;

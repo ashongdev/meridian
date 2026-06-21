@@ -4,7 +4,13 @@ import * as schema from "./schema";
 
 type Db = ReturnType<typeof drizzle<typeof schema>>;
 
-const TOKEN_TTL_MS = 50 * 60 * 1000;
+// DsqlSigner's own default token expiry is 900s (15 min) — we were caching it
+// client-side for 50 min, well past actual AWS-side expiry. Any pool reconnect
+// after that point (e.g. after idleTimeoutMillis closes a connection) silently
+// authenticated with an already-expired token. Request a token whose real
+// expiry actually matches our cache window, with a safety margin below it.
+const TOKEN_EXPIRES_IN_S = 45 * 60;
+const TOKEN_TTL_MS = (TOKEN_EXPIRES_IN_S - 5 * 60) * 1000; // refresh 5 min before real expiry
 let _cachedToken = process.env.AURORA_DSQL_TOKEN ?? "";
 let _tokenExpiry = _cachedToken ? Date.now() + TOKEN_TTL_MS : 0;
 let _pool: Pool | null = null;
@@ -15,8 +21,9 @@ async function getToken(): Promise<string> {
   if (_cachedToken && Date.now() < _tokenExpiry) return _cachedToken;
   const { DsqlSigner } = await import("@aws-sdk/dsql-signer");
   const signer = new DsqlSigner({
-    hostname: process.env.AURORA_DSQL_ENDPOINT!,
-    region:   process.env.AWS_REGION ?? "eu-north-1",
+    hostname:  process.env.AURORA_DSQL_ENDPOINT!,
+    region:    process.env.AWS_REGION ?? "eu-north-1",
+    expiresIn: TOKEN_EXPIRES_IN_S,
   });
   _cachedToken = await signer.getDbConnectAdminAuthToken();
   _tokenExpiry = Date.now() + TOKEN_TTL_MS;

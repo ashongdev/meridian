@@ -39,6 +39,12 @@ yarn-error.log*
 # local dev file storage (Vercel Blob fallback — user-uploaded content, not source)
 /local-uploads
 
+# Playwright
+/e2e/.auth
+/test-results
+/playwright-report
+/blob-report
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
