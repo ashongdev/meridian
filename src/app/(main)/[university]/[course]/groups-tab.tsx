@@ -16,12 +16,14 @@ export function GroupsTab({
   userId,
   initialGroups,
   initialMemberGroupIds,
+  initialOpenGroupId,
 }: {
   courseId: string;
   isEnrolled: boolean;
   userId?: string;
   initialGroups: Group[];
   initialMemberGroupIds: string[];
+  initialOpenGroupId?: string;
 }) {
   const [groups, setGroups]   = useState<Group[]>(initialGroups);
   const [memberIds, setMemberIds] = useState<Set<string>>(new Set(initialMemberGroupIds));
@@ -29,7 +31,11 @@ export function GroupsTab({
   const [submitting, setSubmitting] = useState(false);
   const [busyId, setBusyId]   = useState<string | null>(null);
   const [error, setError]     = useState<string | null>(null);
-  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
+  // Only auto-open if the deep-linked group is one you're actually a member of —
+  // otherwise the live panel would just 403 against the SSE route.
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(
+    initialOpenGroupId && initialMemberGroupIds.includes(initialOpenGroupId) ? initialOpenGroupId : null,
+  );
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");

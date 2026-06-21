@@ -40,6 +40,7 @@ type Props = {
   studyGroups: Group[];
   memberGroupIds: string[];
   aiInitialMessages?: UIMessage[];
+  initialOpenGroupId?: string;
 };
 
 const TABS = [
@@ -51,7 +52,7 @@ const TABS = [
 
 export function CourseTabs({
   uniSlug, courseSlug, courseId, courseCode, isEnrolled, initialTab, userId,
-  wallPosts, papersList, studyGroups, memberGroupIds, aiInitialMessages,
+  wallPosts, papersList, studyGroups, memberGroupIds, aiInitialMessages, initialOpenGroupId,
 }: Props) {
   const [activeTab, setActiveTab] = useState(initialTab || "wall");
 
@@ -99,6 +100,7 @@ export function CourseTabs({
             userId={userId}
             initialGroups={studyGroups}
             initialMemberGroupIds={memberGroupIds}
+            initialOpenGroupId={initialOpenGroupId}
           />
         )}
         {activeTab === "ai" && (

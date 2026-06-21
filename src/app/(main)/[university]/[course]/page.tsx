@@ -9,12 +9,12 @@ import { CourseTabs } from "./course-tabs";
 
 type Props = {
   params:       Promise<{ university: string; course: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; group?: string }>;
 };
 
 export default async function CourseHubPage({ params, searchParams }: Props) {
   const { university: uniSlug, course: courseSlug } = await params;
-  const { tab = "wall" } = await searchParams;
+  const { tab = "wall", group: openGroupId } = await searchParams;
 
   await ensureDb();
 
@@ -174,6 +174,7 @@ export default async function CourseHubPage({ params, searchParams }: Props) {
         studyGroups={groupsList}
         memberGroupIds={memberGroupIds}
         aiInitialMessages={aiInitialMessages}
+        initialOpenGroupId={openGroupId}
       />
     </div>
   );
