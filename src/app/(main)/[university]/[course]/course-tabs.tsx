@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import type { UIMessage } from "ai";
 import { WallTab } from "./wall-tab";
 import { PapersTab } from "./papers-tab";
 import { AiTab } from "./ai-tab";
@@ -38,6 +39,7 @@ type Props = {
   papersList: Material[];
   studyGroups: Group[];
   memberGroupIds: string[];
+  aiInitialMessages?: UIMessage[];
 };
 
 const TABS = [
@@ -49,7 +51,7 @@ const TABS = [
 
 export function CourseTabs({
   uniSlug, courseSlug, courseId, courseCode, isEnrolled, initialTab, userId,
-  wallPosts, papersList, studyGroups, memberGroupIds,
+  wallPosts, papersList, studyGroups, memberGroupIds, aiInitialMessages,
 }: Props) {
   const [activeTab, setActiveTab] = useState(initialTab || "wall");
 
@@ -100,7 +102,12 @@ export function CourseTabs({
           />
         )}
         {activeTab === "ai" && (
-          <AiTab courseId={courseId} courseCode={courseCode} isEnrolled={isEnrolled} />
+          <AiTab
+            courseId={courseId}
+            courseCode={courseCode}
+            isEnrolled={isEnrolled}
+            initialMessages={aiInitialMessages}
+          />
         )}
       </div>
     </>

@@ -1,16 +1,10 @@
-import { embedText } from "@/lib/ai/embed";
-import { searchChunks } from "@/lib/ai/ingest";
+import { buildTutorSystemPrompt } from "@/lib/ai/tutor-prompt";
 import { auth } from "@/lib/auth/config";
 import { db, ensureDb } from "@/lib/db/aurora-dsql";
-import {
-	aiSessions,
-	courseMemberships,
-	courses,
-	universities,
-} from "@/lib/db/schema";
+import { aiSessions, courseMemberships } from "@/lib/db/schema";
 import { rateLimit } from "@/lib/rate-limit";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { convertToModelMessages, streamText } from "ai";
+import { convertToModelMessages, streamText, type UIMessage } from "ai";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -81,17 +75,6 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		const [courseRow] = await db
-			.select({
-				title: courses.title,
-				code: courses.code,
-				uniName: universities.name,
-			})
-			.from(courses)
-			.leftJoin(universities, eq(universities.id, courses.universityId))
-			.where(eq(courses.id, courseId))
-			.limit(1);
-
 		// Extract text from the latest user UIMessage (parts array in v6)
 		const lastUserMsg = [...messages]
 			.reverse()
@@ -102,69 +85,7 @@ export async function POST(req: NextRequest) {
 				?.map((p: { text: string }) => p.text)
 				?.join("") ?? "";
 
-		// RAG: embed question → find similar chunks
-		const [queryEmbedding] = await Promise.all([embedText(lastUserText)]);
-		const relevantChunks = await searchChunks(
-			courseId,
-			queryEmbedding,
-			6,
-		).catch(() => []);
-
-		const contextBlock =
-			relevantChunks.length > 0
-				? relevantChunks
-						.map(
-							(c, i) =>
-								`[${i + 1}] From "${c.materialTitle}":\n${c.content}`,
-						)
-						.join("\n\n---\n\n")
-				: "No course materials have been indexed yet. Answer from general knowledge but note the lack of course-specific context.";
-
-		const systemPrompt = `You are Meridian, an AI tutor for ${courseRow?.code ?? "this course"} — ${courseRow?.title ?? ""} at ${courseRow?.uniName ?? "university"}.
-
-Your job is to help students understand course material deeply. You are patient, encouraging, and academically rigorous.
-
-COURSE MATERIALS CONTEXT:
-${contextBlock}
-
-INSTRUCTIONS:
-- Ground your answers in the course materials above when relevant.
-- If materials don't cover the question, say so and answer from general academic knowledge.
-- Cite sources naturally (e.g. "According to the lecture notes on X...").
-- Be concise but thorough. Use examples. Format with markdown when it helps.
-- Never copy-paste — synthesise and explain.`;
-
-		// Persist messages fire-and-forget
-		db.select({ id: aiSessions.id })
-			.from(aiSessions)
-			.where(
-				and(
-					eq(aiSessions.userId, userId),
-					eq(aiSessions.courseId, courseId),
-				),
-			)
-			.limit(1)
-			.then(([existing]) => {
-				if (existing) {
-					return db
-						.update(aiSessions)
-						.set({
-							messages: JSON.stringify(messages),
-							updatedAt: new Date(),
-						})
-						.where(eq(aiSessions.id, existing.id));
-				}
-				return db
-					.insert(aiSessions)
-					.values({
-						userId,
-						courseId,
-						messages: JSON.stringify(messages),
-					});
-			})
-			.catch((err) =>
-				console.error("[ai/chat] session persist failed:", err),
-			);
+		const systemPrompt = await buildTutorSystemPrompt(courseId, lastUserText);
 
 		const result = streamText({
 			model: google("gemini-3.1-flash-lite"),
@@ -172,12 +93,37 @@ INSTRUCTIONS:
 			messages: await convertToModelMessages(messages),
 		});
 
-		return result.toUIMessageStreamResponse();
+		return result.toUIMessageStreamResponse({
+			// Fires once the full response is ready — `messages` is the complete
+			// conversation including the new assistant reply, ready to persist verbatim.
+			onFinish: ({ messages: finalMessages }) => {
+				persistSession(userId, courseId, finalMessages).catch((err) =>
+					console.error("[ai/chat] session persist failed:", err),
+				);
+			},
+		});
 	} catch (err) {
 		console.error("[POST /api/ai/chat]", err);
 		return NextResponse.json(
 			{ error: "AI tutor unavailable" },
 			{ status: 500 },
 		);
+	}
+}
+
+async function persistSession(userId: string, courseId: string, messages: UIMessage[]) {
+	const [existing] = await db
+		.select({ id: aiSessions.id })
+		.from(aiSessions)
+		.where(and(eq(aiSessions.userId, userId), eq(aiSessions.courseId, courseId)))
+		.limit(1);
+
+	if (existing) {
+		await db
+			.update(aiSessions)
+			.set({ messages: JSON.stringify(messages), updatedAt: new Date() })
+			.where(eq(aiSessions.id, existing.id));
+	} else {
+		await db.insert(aiSessions).values({ userId, courseId, messages: JSON.stringify(messages) });
 	}
 }

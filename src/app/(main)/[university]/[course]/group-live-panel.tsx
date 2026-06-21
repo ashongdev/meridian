@@ -36,7 +36,37 @@ function formatClock(totalSec: number) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export function GroupLivePanel({ groupId, currentUserId }: { groupId: string; currentUserId?: string }) {
+function Avatar({ name, url, isAi, size = "w-8 h-8" }: { name: string | null; url: string | null; isAi?: boolean; size?: string }) {
+  if (isAi) {
+    return (
+      <div className={`${size} rounded-full bg-teal/15 border border-teal/30 flex items-center justify-center shrink-0`}>
+        <span className="text-teal text-xs">◎</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`${size} rounded-full bg-surface-3 border border-border flex items-center justify-center overflow-hidden shrink-0`}>
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="w-full h-full object-cover" />
+      ) : (
+        <span className="text-ink-2 text-xs font-bold">{(name ?? "?")[0]?.toUpperCase()}</span>
+      )}
+    </div>
+  );
+}
+
+export function GroupLivePanel({
+  groupId,
+  groupName,
+  currentUserId,
+  onClose,
+}: {
+  groupId: string;
+  groupName: string;
+  currentUserId?: string;
+  onClose?: () => void;
+}) {
   const [presence, setPresence]   = useState<PresenceUser[]>([]);
   const [pomodoro, setPomodoro]   = useState<PomodoroState | null>(null);
   const [messages, setMessages]   = useState<Message[]>([]);
@@ -123,45 +153,43 @@ export function GroupLivePanel({ groupId, currentUserId }: { groupId: string; cu
   const almostUp  = isRunning && displaySec <= 60;
 
   return (
-    <div className="mt-3 bg-surface-2 border border-border rounded-xl p-4">
+    <div className="bg-surface-2 border border-border rounded-xl flex flex-col h-full overflow-hidden">
 
-      {/* ── Presence ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-teal" : "bg-coral"}`} />
-          <span className="text-xs font-body text-ink-3">
-            {connected ? "Live" : "Reconnecting…"}
-          </span>
+      {/* ── Header: group name, presence, close ─────────────────────────── */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${connected ? "bg-teal" : "bg-coral"}`} />
+          <h3 className="font-display font-semibold text-ink text-sm truncate">{groupName}</h3>
         </div>
-        <div className="flex items-center -space-x-1.5">
-          {presence.length === 0 ? (
-            <span className="text-xs font-body text-ink-3">No one else here yet</span>
-          ) : (
-            presence.map((p) => (
-              <div
-                key={p.userId}
-                title={p.userName ?? "Student"}
-                className="w-6 h-6 rounded-full border-2 border-surface-2 bg-teal/15 flex items-center justify-center overflow-hidden"
-              >
-                {p.userAvatar ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.userAvatar} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-teal text-xs font-bold">
-                    {(p.userName ?? "?")[0]?.toUpperCase()}
-                  </span>
-                )}
-              </div>
-            ))
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center -space-x-2">
+            {presence.length === 0 ? (
+              <span className="text-xs font-body text-ink-3">Just you</span>
+            ) : (
+              presence.slice(0, 5).map((p) => (
+                <div key={p.userId} title={p.userName ?? "Student"} className="border-2 border-surface-2 rounded-full">
+                  <Avatar name={p.userName} url={p.userAvatar} size="w-7 h-7" />
+                </div>
+              ))
+            )}
+          </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="text-ink-3 hover:text-ink transition-colors text-lg leading-none px-1"
+              title="Close"
+            >
+              ×
+            </button>
           )}
         </div>
       </div>
 
-      {/* ── Pomodoro ─────────────────────────────────────────────────────── */}
-      <div className="bg-surface-3 border border-border rounded-lg p-4 mb-4 flex items-center justify-between flex-wrap gap-3">
+      {/* ── Pomodoro bar ─────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-2.5 border-b border-border bg-surface-3 shrink-0">
         <div className="flex items-center gap-3">
           <span
-            className={`font-display font-extrabold text-2xl tabular-nums ${
+            className={`font-display font-extrabold text-xl tabular-nums ${
               almostUp ? "text-amber" : isRunning ? "text-teal" : isPaused ? "text-coral" : "text-ink"
             }`}
           >
@@ -211,53 +239,63 @@ export function GroupLivePanel({ groupId, currentUserId }: { groupId: string; cu
         </div>
       </div>
 
-      {/* ── Chat ─────────────────────────────────────────────────────────── */}
-      <div className="bg-surface-3 border border-border rounded-lg flex flex-col h-64">
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {messages.length === 0 && (
-            <p className="text-xs font-body text-ink-3 text-center mt-8">No messages yet — say hi.</p>
-          )}
-          {messages.map((m) => {
-            const isMe = m.userId === currentUserId;
-            return (
-              <div key={m.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+      {/* ── Chat — fills all remaining space ────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 min-h-0">
+        {messages.length === 0 && (
+          <div className="h-full flex items-center justify-center">
+            <p className="text-sm font-body text-ink-3 text-center">No messages yet — say hi, or try <span className="text-teal">@AI</span> to ask the tutor.</p>
+          </div>
+        )}
+        {messages.map((m) => {
+          const isMe = m.userId === currentUserId;
+          const isAi = m.userName === "AI Tutor";
+          return (
+            <div key={m.id} className={`flex gap-2 ${isMe && !isAi ? "justify-end" : "justify-start"}`}>
+              {(!isMe || isAi) && <Avatar name={m.userName} url={m.userAvatar} isAi={isAi} />}
+              <div className={`flex flex-col ${isMe && !isAi ? "items-end" : "items-start"} max-w-[65%]`}>
                 <div
-                  className={`max-w-[80%] rounded-lg px-3 py-1.5 text-sm font-body ${
-                    isMe ? "bg-teal/15 text-ink" : "bg-surface-2 text-ink-2"
+                  className={`rounded-2xl px-4 py-2.5 text-sm font-body ${
+                    isAi
+                      ? "bg-teal/10 border border-teal/30 text-ink rounded-tl-sm"
+                      : isMe ? "bg-teal text-paper rounded-tr-sm" : "bg-surface-3 border border-border text-ink rounded-tl-sm"
                   }`}
                 >
-                  {!isMe && (
-                    <p className="text-xs font-body font-semibold text-teal mb-0.5">
+                  {(!isMe || isAi) && (
+                    <p className={`text-xs font-body font-semibold mb-1 ${isAi ? "text-teal" : "text-ink-2"}`}>
                       {m.userName ?? "Anonymous"}
                     </p>
                   )}
-                  <p className="leading-relaxed">{m.content}</p>
+                  <p className="leading-relaxed whitespace-pre-wrap">{m.content}</p>
                 </div>
-                <span className="text-xs font-body text-ink-3 mt-0.5">
+                <span className="text-xs font-body text-ink-3 mt-1 px-1">
                   {formatDistanceToNow(new Date(m.createdAt), { addSuffix: true })}
                 </span>
               </div>
-            );
-          })}
-          <div ref={messagesEndRef} />
-        </div>
-        <form onSubmit={sendMessage} className="flex items-center gap-2 p-2 border-t border-border">
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Message the group…"
-            maxLength={2000}
-            className="flex-1 bg-transparent text-ink text-sm font-body px-2 py-1.5 focus:outline-none placeholder:text-ink-3"
-          />
-          <button
-            type="submit"
-            disabled={sending || !draft.trim()}
-            className="text-xs font-display font-bold px-3 py-1.5 rounded-full bg-teal text-paper hover:bg-teal-dim transition-colors disabled:opacity-50"
-          >
-            Send
-          </button>
-        </form>
+              {isMe && !isAi && <Avatar name={m.userName} url={m.userAvatar} />}
+            </div>
+          );
+        })}
+        <div ref={messagesEndRef} />
       </div>
+
+      {/* ── Composer ─────────────────────────────────────────────────────── */}
+      <form onSubmit={sendMessage} className="flex items-center gap-3 px-4 py-3 border-t border-border shrink-0">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Message the group… (try @AI to ask the tutor)"
+          maxLength={2000}
+          className="flex-1 bg-surface border border-border text-ink text-sm font-body px-4 py-3 rounded-full focus:outline-none focus:border-teal/60 placeholder:text-ink-3"
+        />
+        <button
+          type="submit"
+          disabled={sending || !draft.trim()}
+          className="bg-teal text-paper font-display font-bold text-sm w-11 h-11 rounded-full hover:bg-teal-dim transition-colors disabled:opacity-40 shrink-0 flex items-center justify-center"
+          title="Send"
+        >
+          {sending ? "…" : "→"}
+        </button>
+      </form>
     </div>
   );
 }

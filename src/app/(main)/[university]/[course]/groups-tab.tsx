@@ -96,8 +96,11 @@ export function GroupsTab({
     }
   }
 
+  const expandedGroup = groups.find((g) => g.id === expandedGroupId) ?? null;
+
   return (
-    <div className="max-w-2xl">
+    <div className={expandedGroup ? "flex gap-6 items-start" : ""}>
+    <div className={expandedGroup ? "hidden md:block w-full md:w-80 shrink-0 md:h-[calc(100vh-260px)] md:overflow-y-auto md:pr-1" : "max-w-2xl"}>
 
       {/* ── Create group ─────────────────────────────────────────────────── */}
       {isEnrolled && (
@@ -179,27 +182,37 @@ export function GroupsTab({
           const isCreator = g.createdBy === userId;
           const isFull    = g.memberCount >= g.maxSize;
           const scheduled = g.scheduledAt ? new Date(g.scheduledAt) : null;
+          const isOpen    = expandedGroupId === g.id;
 
           return (
-            <article key={g.id} className="bg-surface border border-border rounded-xl p-5">
+            <article
+              key={g.id}
+              className={`bg-surface border rounded-xl transition-colors ${expandedGroup ? "p-4" : "p-5"} ${
+                isOpen ? "border-teal/40" : "border-border"
+              }`}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <h3 className="font-display font-semibold text-ink text-base">{g.name}</h3>
-                    {isCreator && (
+                    {isCreator && !expandedGroup && (
                       <span className="text-xs font-body text-teal bg-teal/10 px-2 py-0.5 rounded-full">
                         You created this
                       </span>
                     )}
                   </div>
-                  {g.description && (
+                  {g.description && !expandedGroup && (
                     <p className="font-body text-ink-2 text-sm leading-relaxed mb-2">{g.description}</p>
                   )}
                   <div className="flex items-center gap-3 text-xs font-body text-ink-3 flex-wrap">
                     <span>{g.memberCount}/{g.maxSize} members</span>
-                    <span>·</span>
-                    <span>by {g.creatorName ?? "Anonymous"}</span>
-                    {scheduled && (
+                    {!expandedGroup && (
+                      <>
+                        <span>·</span>
+                        <span>by {g.creatorName ?? "Anonymous"}</span>
+                      </>
+                    )}
+                    {scheduled && !expandedGroup && (
                       <>
                         <span>·</span>
                         <span className={isFuture(scheduled) ? "text-amber" : ""}>
@@ -214,13 +227,17 @@ export function GroupsTab({
                 <div className="flex items-center gap-2 shrink-0">
                   {isMember && (
                     <button
-                      onClick={() => setExpandedGroupId(expandedGroupId === g.id ? null : g.id)}
-                      className="text-xs font-display font-bold px-4 py-2 rounded-full border border-teal/30 text-teal hover:bg-teal/10 transition-colors"
+                      onClick={() => setExpandedGroupId(isOpen ? null : g.id)}
+                      className={`text-xs font-display font-bold px-4 py-2 rounded-full border transition-colors ${
+                        isOpen
+                          ? "bg-teal/10 border-teal/40 text-teal"
+                          : "border-teal/30 text-teal hover:bg-teal/10"
+                      }`}
                     >
-                      {expandedGroupId === g.id ? "Close" : "Open"}
+                      {isOpen ? "Close" : "Open"}
                     </button>
                   )}
-                  {isEnrolled && !isCreator && (
+                  {isEnrolled && !isCreator && !expandedGroup && (
                     isMember ? (
                       <button
                         onClick={() => leaveGroup(g.id)}
@@ -241,10 +258,6 @@ export function GroupsTab({
                   )}
                 </div>
               </div>
-
-              {expandedGroupId === g.id && (
-                <GroupLivePanel groupId={g.id} currentUserId={userId} />
-              )}
             </article>
           );
         })}
@@ -260,6 +273,18 @@ export function GroupsTab({
           </div>
         )}
       </div>
+    </div>
+
+    {expandedGroup && (
+      <div className="flex-1 min-w-0 h-[calc(100vh-260px)]">
+        <GroupLivePanel
+          groupId={expandedGroup.id}
+          groupName={expandedGroup.name}
+          currentUserId={userId}
+          onClose={() => setExpandedGroupId(null)}
+        />
+      </div>
+    )}
     </div>
   );
 }

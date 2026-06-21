@@ -1,9 +1,10 @@
 import { auth } from "@/lib/auth/config";
 import { db, ensureDb } from "@/lib/db/aurora-dsql";
-import { courses, universities, courseMemberships, posts, materials, users, studyGroups, studyGroupMembers } from "@/lib/db/schema";
+import { courses, universities, courseMemberships, posts, materials, users, studyGroups, studyGroupMembers, aiSessions } from "@/lib/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { UIMessage } from "ai";
 import { CourseTabs } from "./course-tabs";
 
 type Props = {
@@ -44,7 +45,7 @@ export default async function CourseHubPage({ params, searchParams }: Props) {
   const userId = session?.user?.id;
 
   // Fetch all tab data in parallel on first load — tab switches are client-side after this
-  const [enrollmentRow, wallPosts, papersList, groupsList, memberGroupRows] = await Promise.all([
+  const [enrollmentRow, wallPosts, papersList, groupsList, memberGroupRows, aiSessionRow] = await Promise.all([
     userId
       ? db.select({ id: courseMemberships.id })
           .from(courseMemberships)
@@ -95,10 +96,26 @@ export default async function CourseHubPage({ params, searchParams }: Props) {
           .innerJoin(studyGroups, eq(studyGroups.id, studyGroupMembers.groupId))
           .where(and(eq(studyGroupMembers.userId, userId), eq(studyGroups.courseId, row.id)))
       : Promise.resolve([]),
+
+    userId
+      ? db.select({ messages: aiSessions.messages })
+          .from(aiSessions)
+          .where(and(eq(aiSessions.userId, userId), eq(aiSessions.courseId, row.id)))
+          .limit(1)
+      : Promise.resolve([]),
   ]);
 
   const isEnrolled = enrollmentRow.length > 0;
   const memberGroupIds = memberGroupRows.map((r) => r.groupId);
+
+  let aiInitialMessages: UIMessage[] | undefined;
+  if (aiSessionRow[0]?.messages) {
+    try {
+      aiInitialMessages = JSON.parse(aiSessionRow[0].messages);
+    } catch {
+      aiInitialMessages = undefined;
+    }
+  }
 
   return (
     <div className="min-h-screen">
@@ -156,6 +173,7 @@ export default async function CourseHubPage({ params, searchParams }: Props) {
         papersList={papersList}
         studyGroups={groupsList}
         memberGroupIds={memberGroupIds}
+        aiInitialMessages={aiInitialMessages}
       />
     </div>
   );

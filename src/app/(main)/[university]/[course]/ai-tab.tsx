@@ -6,9 +6,10 @@ import type { UIMessage } from "ai";
 import { useState, useRef, useEffect, type FormEvent } from "react";
 
 type Props = {
-  courseId:   string;
-  courseCode: string;
-  isEnrolled: boolean;
+  courseId:        string;
+  courseCode:      string;
+  isEnrolled:      boolean;
+  initialMessages?: UIMessage[];
 };
 
 function getMessageText(m: UIMessage): string {
@@ -18,13 +19,13 @@ function getMessageText(m: UIMessage): string {
     .join("");
 }
 
-export function AiTab({ courseId, courseCode, isEnrolled }: Props) {
+export function AiTab({ courseId, courseCode, isEnrolled, initialMessages }: Props) {
   const [inputValue, setInputValue] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { messages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({ api: "/api/ai/chat", body: { courseId } }),
-    messages: [
+    messages: initialMessages?.length ? initialMessages : [
       {
         id:    "welcome",
         role:  "assistant",
@@ -54,7 +55,7 @@ export function AiTab({ courseId, courseCode, isEnrolled }: Props) {
           <span className="text-teal text-xl">◎</span>
         </div>
         <h3 className="font-display font-bold text-ink text-lg mb-2">Enroll to access AI Tutor</h3>
-        <p className="font-body text-ink-2 text-sm">Join this course to get AI-powered answers grounded in your classmates' uploaded materials.</p>
+        <p className="font-body text-ink-2 text-sm">Join this course to get AI-powered answers grounded in your classmates&apos; uploaded materials.</p>
       </div>
     );
   }

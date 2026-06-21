@@ -1,7 +1,8 @@
 import { auth } from "@/lib/auth/config";
 import { db, ensureDb } from "@/lib/db/aurora-dsql";
-import { studyGroupMembers, groupMessages } from "@/lib/db/schema";
+import { studyGroupMembers, studyGroups, groupMessages } from "@/lib/db/schema";
 import { rateLimit } from "@/lib/rate-limit";
+import { mentionsAiTutor, replyToAiMention } from "@/lib/ai/group-mention";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -38,8 +39,9 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   try {
     const [membership] = await db
-      .select({ id: studyGroupMembers.id })
+      .select({ id: studyGroupMembers.id, courseId: studyGroups.courseId })
       .from(studyGroupMembers)
+      .innerJoin(studyGroups, eq(studyGroups.id, studyGroupMembers.groupId))
       .where(and(eq(studyGroupMembers.groupId, groupId), eq(studyGroupMembers.userId, userId)))
       .limit(1);
     if (!membership) {
@@ -49,6 +51,16 @@ export async function POST(req: NextRequest, { params }: Params) {
     const [message] = await db.insert(groupMessages)
       .values({ groupId, userId, content: parsed.data.content })
       .returning();
+
+    if (mentionsAiTutor(parsed.data.content)) {
+      replyToAiMention({
+        groupId,
+        courseId: membership.courseId,
+        mentionerUserId: userId,
+        isPro: session.user.isPro ?? false,
+        content: parsed.data.content,
+      }).catch((err) => console.error("[POST /messages] AI mention reply failed:", err));
+    }
 
     return NextResponse.json(
       { data: { ...message, userName: session.user.name ?? null, userAvatar: session.user.image ?? null } },
