@@ -4,6 +4,7 @@
  * Safe to run multiple times — duplicate index names are skipped (42P07).
  * Run: npx tsx --env-file=.env.local scripts/apply-indexes.ts
  */
+import "./_network-fix";
 import { Pool } from "pg";
 
 const host     = process.env.AURORA_DSQL_ENDPOINT!;

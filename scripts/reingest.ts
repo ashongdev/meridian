@@ -1,10 +1,22 @@
+import "./_network-fix";
 import { Pool } from "pg";
 import { ingestMaterial } from "../src/lib/ai/ingest";
 
-const url = process.env.DATABASE_URL;
-if (!url) throw new Error("DATABASE_URL not set");
+const databaseUrl = process.env.DATABASE_URL;
+const endpoint    = process.env.AURORA_DSQL_ENDPOINT;
+const token       = process.env.AURORA_DSQL_TOKEN;
 
-const pool = new Pool({ connectionString: url, max: 1 });
+if (!databaseUrl && (!endpoint || !token)) {
+  throw new Error("Set DATABASE_URL (local) or AURORA_DSQL_ENDPOINT + AURORA_DSQL_TOKEN (Aurora DSQL)");
+}
+
+const pool = databaseUrl
+  ? new Pool({ connectionString: databaseUrl, max: 1 })
+  : new Pool({
+      host: endpoint!, port: 5432, database: "postgres",
+      user: "admin", password: token!,
+      ssl: { rejectUnauthorized: false }, max: 1,
+    });
 
 async function main() {
   const { rows } = await pool.query<{

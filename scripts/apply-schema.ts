@@ -4,6 +4,7 @@
  *
  * Usage: npm run db:apply
  */
+import "./_network-fix";
 import { Pool } from "pg";
 import fs from "fs";
 import path from "path";

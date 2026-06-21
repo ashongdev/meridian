@@ -14,12 +14,21 @@ export async function embedText(text: string): Promise<number[]> {
   return embedding;
 }
 
+// Gemini's batch embedding endpoint caps at 100 requests per call
+const GEMINI_BATCH_LIMIT = 100;
+
 export async function embedBatch(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const { embeddings } = await embedMany({
-    model: EMBEDDING_MODEL,
-    values: texts,
-    providerOptions: PROVIDER_OPTIONS,
-  });
+
+  const embeddings: number[][] = [];
+  for (let i = 0; i < texts.length; i += GEMINI_BATCH_LIMIT) {
+    const slice = texts.slice(i, i + GEMINI_BATCH_LIMIT);
+    const { embeddings: batchEmbeddings } = await embedMany({
+      model: EMBEDDING_MODEL,
+      values: slice,
+      providerOptions: PROVIDER_OPTIONS,
+    });
+    embeddings.push(...batchEmbeddings);
+  }
   return embeddings;
 }

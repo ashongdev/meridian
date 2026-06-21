@@ -1,3 +1,4 @@
+import "./_network-fix";
 import { Pool } from "pg";
 
 const endpoint = process.env.AURORA_DSQL_ENDPOINT;

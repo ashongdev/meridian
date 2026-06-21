@@ -20,6 +20,12 @@ export function chunkText(text: string): string[] {
       }
     }
     chunks.push(cleaned.slice(start, breakAt).trim());
+
+    // This chunk already reaches the end of the text — there's no next chunk to
+    // overlap with. Stop here; stepping back by CHUNK_OVERLAP can otherwise land
+    // exactly back on the same `start` and loop forever.
+    if (breakAt >= cleaned.length) break;
+
     start = breakAt - CHUNK_OVERLAP;
     if (start < 0) start = 0;
   }

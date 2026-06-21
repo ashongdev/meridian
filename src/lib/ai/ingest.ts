@@ -1,12 +1,22 @@
 import { Pool } from "pg";
 import { chunkText } from "./chunk";
 import { embedBatch } from "./embed";
+import { db, ensureDb } from "@/lib/db/aurora-dsql";
+import { materials } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
-// Uses the same DATABASE_URL as the main pool — pgvector lives in the same DB locally
+// The vector store (material_chunks, pgvector) lives in a separate Postgres instance
+// from the main app DB (materials, courses, etc. — Aurora DSQL). Status updates on
+// `materials` must go through ensureDb()/db, not this pool, or they silently no-op.
 function getPool(): Pool {
   const url = process.env.DATABASE_URL ?? process.env.AURORA_PG_URL;
   if (!url) throw new Error("DATABASE_URL or AURORA_PG_URL required for vector storage");
   return new Pool({ connectionString: url, max: 2 });
+}
+
+async function setEmbeddingStatus(materialId: string, status: "processing" | "done" | "failed") {
+  await ensureDb();
+  await db.update(materials).set({ embeddingStatus: status }).where(eq(materials.id, materialId));
 }
 
 function resolveGDriveUrl(fileUrl: string): string | null {
@@ -70,13 +80,23 @@ async function extractText(
       );
     }
 
+    const MAX_PAGES = 300;
+    // pdfjs accumulates document-level caches (fonts, etc.) across getPage() calls
+    // that page.cleanup() alone doesn't release — periodic doc.cleanup() keeps
+    // memory bounded on long PDFs that would otherwise OOM the process.
+    const CLEANUP_EVERY = 20;
+
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
     // pdfjs v5 needs a real worker URL — empty string causes "fake worker" setup to fail
     pdfjs.GlobalWorkerOptions.workerSrc =
       "file://" + process.cwd() + "/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs";
     const doc = await pdfjs.getDocument({ data: rawBuf, verbosity: 0 }).promise;
+    const pageCount = Math.min(doc.numPages, MAX_PAGES);
+    if (doc.numPages > MAX_PAGES) {
+      console.warn(`[ingest] PDF has ${doc.numPages} pages — truncating to first ${MAX_PAGES}`);
+    }
     const pages: string[] = [];
-    for (let i = 1; i <= doc.numPages; i++) {
+    for (let i = 1; i <= pageCount; i++) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
       const pageText = (content.items as Array<{ str?: string }>)
@@ -84,6 +104,7 @@ async function extractText(
         .join(" ");
       pages.push(pageText);
       page.cleanup();
+      if (i % CLEANUP_EVERY === 0) await doc.cleanup();
     }
     await doc.destroy();
     return pages.join("\n");
@@ -104,11 +125,7 @@ export async function ingestMaterial(material: {
   const client = await pool.connect();
 
   try {
-    // Mark as processing
-    await client.query(
-      `UPDATE materials SET embedding_status = 'processing' WHERE id = $1`,
-      [material.id]
-    );
+    await setEmbeddingStatus(material.id, "processing");
 
     // Check if already ingested (idempotent)
     const { rows: existing } = await client.query(
@@ -116,10 +133,7 @@ export async function ingestMaterial(material: {
       [material.id]
     );
     if (Number(existing[0].n) > 0) {
-      await client.query(
-        `UPDATE materials SET embedding_status = 'done' WHERE id = $1`,
-        [material.id]
-      );
+      await setEmbeddingStatus(material.id, "done");
       return { chunks: Number(existing[0].n), skipped: true };
     }
 
@@ -127,10 +141,7 @@ export async function ingestMaterial(material: {
     const chunks  = chunkText(rawText);
 
     if (chunks.length === 0) {
-      await client.query(
-        `UPDATE materials SET embedding_status = 'done' WHERE id = $1`,
-        [material.id]
-      );
+      await setEmbeddingStatus(material.id, "done");
       return { chunks: 0, skipped: false };
     }
 
@@ -149,18 +160,12 @@ export async function ingestMaterial(material: {
     }
     await client.query("COMMIT");
 
-    await client.query(
-      `UPDATE materials SET embedding_status = 'done' WHERE id = $1`,
-      [material.id]
-    );
+    await setEmbeddingStatus(material.id, "done");
 
     return { chunks: chunks.length, skipped: false };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    await client.query(
-      `UPDATE materials SET embedding_status = 'failed' WHERE id = $1`,
-      [material.id]
-    ).catch(() => {});
+    await setEmbeddingStatus(material.id, "failed").catch(() => {});
     throw err;
   } finally {
     client.release();
