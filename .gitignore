@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local dev file storage (Vercel Blob fallback — user-uploaded content, not source)
+/local-uploads
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

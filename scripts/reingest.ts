@@ -1,22 +1,19 @@
 import "./_network-fix";
 import { Pool } from "pg";
-import { ingestMaterial } from "../src/lib/ai/ingest";
+import { ingestMaterial, STALE_PROCESSING_MS } from "../src/lib/ai/ingest";
 
-const databaseUrl = process.env.DATABASE_URL;
-const endpoint    = process.env.AURORA_DSQL_ENDPOINT;
-const token       = process.env.AURORA_DSQL_TOKEN;
+const endpoint = process.env.AURORA_DSQL_ENDPOINT;
+const token    = process.env.AURORA_DSQL_TOKEN;
 
-if (!databaseUrl && (!endpoint || !token)) {
-  throw new Error("Set DATABASE_URL (local) or AURORA_DSQL_ENDPOINT + AURORA_DSQL_TOKEN (Aurora DSQL)");
+if (!endpoint || !token) {
+  throw new Error("Set AURORA_DSQL_ENDPOINT + AURORA_DSQL_TOKEN");
 }
 
-const pool = databaseUrl
-  ? new Pool({ connectionString: databaseUrl, max: 1 })
-  : new Pool({
-      host: endpoint!, port: 5432, database: "postgres",
-      user: "admin", password: token!,
-      ssl: { rejectUnauthorized: false }, max: 1,
-    });
+const pool = new Pool({
+  host: endpoint, port: 5432, database: "postgres",
+  user: "admin", password: token,
+  ssl: { rejectUnauthorized: false }, max: 1,
+});
 
 async function main() {
   const { rows } = await pool.query<{
@@ -25,6 +22,7 @@ async function main() {
     `SELECT id, course_id, file_url, mime_type, title
      FROM materials
      WHERE embedding_status IN ('pending', 'failed')
+        OR (embedding_status = 'processing' AND updated_at < now() - interval '${STALE_PROCESSING_MS} milliseconds')
      ORDER BY created_at`
   );
 

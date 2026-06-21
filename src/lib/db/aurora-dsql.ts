@@ -24,20 +24,10 @@ async function getToken(): Promise<string> {
 }
 
 /**
- * Call at the start of every route handler.
- * - LOCAL: creates a plain pg pool from DATABASE_URL (no-op after first call).
- * - PRODUCTION: generates/rotates the Aurora DSQL auth token, rebuilds the
- *   pool only when the token changes (every ~50 min).
+ * Call at the start of every route handler. Generates/rotates the Aurora DSQL
+ * auth token and rebuilds the pool only when the token changes (every ~50 min).
  */
 export async function ensureDb(): Promise<void> {
-  if (process.env.DATABASE_URL) {
-    if (!_db) {
-      _pool = new Pool({ connectionString: process.env.DATABASE_URL });
-      _db   = drizzle(_pool, { schema });
-    }
-    return;
-  }
-
   const token = await getToken();
   if (!_db || token !== _poolToken) {
     if (_pool) await _pool.end().catch(() => {});

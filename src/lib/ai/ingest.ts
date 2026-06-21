@@ -3,20 +3,26 @@ import { chunkText } from "./chunk";
 import { embedBatch } from "./embed";
 import { db, ensureDb } from "@/lib/db/aurora-dsql";
 import { materials } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 // The vector store (material_chunks, pgvector) lives in a separate Postgres instance
-// from the main app DB (materials, courses, etc. — Aurora DSQL). Status updates on
-// `materials` must go through ensureDb()/db, not this pool, or they silently no-op.
+// (Supabase) from the main app DB (materials, courses, etc. — Aurora DSQL). Status
+// updates and title lookups on `materials` must go through ensureDb()/db, not this pool.
 function getPool(): Pool {
-  const url = process.env.DATABASE_URL ?? process.env.AURORA_PG_URL;
-  if (!url) throw new Error("DATABASE_URL or AURORA_PG_URL required for vector storage");
+  const url = process.env.VECTOR_DB_URL;
+  if (!url) throw new Error("VECTOR_DB_URL required for vector storage");
   return new Pool({ connectionString: url, max: 2 });
 }
 
+// A crashed/interrupted run can leave a row wedged in "processing" forever since
+// nothing else flips it to "failed" — treat it as abandoned past this age.
+export const STALE_PROCESSING_MS = 10 * 60 * 1000;
+
 async function setEmbeddingStatus(materialId: string, status: "processing" | "done" | "failed") {
   await ensureDb();
-  await db.update(materials).set({ embeddingStatus: status }).where(eq(materials.id, materialId));
+  await db.update(materials)
+    .set({ embeddingStatus: status, updatedAt: new Date() })
+    .where(eq(materials.id, materialId));
 }
 
 function resolveGDriveUrl(fileUrl: string): string | null {
@@ -181,25 +187,39 @@ export async function searchChunks(
   const pool   = getPool();
   const client = await pool.connect();
 
+  let rows: Array<{ content: string; materialId: string; similarity: number }>;
   try {
     const vec = `[${queryEmbedding.join(",")}]`;
-    const { rows } = await client.query(
+    ({ rows } = await client.query(
       `SELECT
          mc.content,
          mc.material_id   AS "materialId",
-         m.title          AS "materialTitle",
          1 - (mc.embedding <=> $1::vector) AS similarity
        FROM material_chunks mc
-       JOIN materials m ON m.id = mc.material_id
        WHERE mc.course_id = $2
          AND mc.embedding IS NOT NULL
        ORDER BY mc.embedding <=> $1::vector
        LIMIT $3`,
       [vec, courseId, limit]
-    );
-    return rows;
+    ));
   } finally {
     client.release();
     await pool.end();
   }
+
+  if (rows.length === 0) return [];
+
+  // Titles live in Aurora DSQL, not the pgvector store — fetch separately.
+  await ensureDb();
+  const materialIds = [...new Set(rows.map((r) => r.materialId))];
+  const titleRows = await db
+    .select({ id: materials.id, title: materials.title })
+    .from(materials)
+    .where(inArray(materials.id, materialIds));
+  const titleById = new Map(titleRows.map((m) => [m.id, m.title]));
+
+  return rows.map((r) => ({
+    ...r,
+    materialTitle: titleById.get(r.materialId) ?? "Untitled",
+  }));
 }

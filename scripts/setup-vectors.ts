@@ -1,17 +1,15 @@
 /**
  * Enable pgvector extension and create material_chunks table.
- * Local: uses DATABASE_URL
- * Production: uses Aurora PostgreSQL (not Aurora DSQL — DSQL doesn't support vector)
+ * Uses VECTOR_DB_URL (Supabase — Aurora DSQL doesn't support the vector extension).
  *
  * Run: npx tsx --env-file=.env.local scripts/setup-vectors.ts
  */
 import { Pool } from "pg";
 
-const connString = process.env.DATABASE_URL
-  ?? (process.env.AURORA_PG_URL || undefined);
+const connString = process.env.VECTOR_DB_URL;
 
 if (!connString) {
-  console.error("Set DATABASE_URL or AURORA_PG_URL");
+  console.error("Set VECTOR_DB_URL");
   process.exit(1);
 }
 
@@ -31,7 +29,7 @@ async function run() {
         course_id    uuid        NOT NULL,
         chunk_index  integer     NOT NULL,
         content      text        NOT NULL,
-        embedding    vector(768),
+        embedding    vector(384),
         created_at   timestamptz NOT NULL DEFAULT now()
       )
     `);

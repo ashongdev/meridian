@@ -9,22 +9,19 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { universities, courses, promoCodes } from "../src/lib/db/schema";
 
-const databaseUrl = process.env.DATABASE_URL;
-const endpoint    = process.env.AURORA_DSQL_ENDPOINT;
-const token       = process.env.AURORA_DSQL_TOKEN;
+const endpoint = process.env.AURORA_DSQL_ENDPOINT;
+const token    = process.env.AURORA_DSQL_TOKEN;
 
-if (!databaseUrl && (!endpoint || !token)) {
-  console.error("Set DATABASE_URL (local) or AURORA_DSQL_ENDPOINT + AURORA_DSQL_TOKEN (production)");
+if (!endpoint || !token) {
+  console.error("Set AURORA_DSQL_ENDPOINT + AURORA_DSQL_TOKEN");
   process.exit(1);
 }
 
-const pool = databaseUrl
-  ? new Pool({ connectionString: databaseUrl, max: 1 })
-  : new Pool({
-      host: endpoint!, port: 5432, database: "postgres",
-      user: "admin", password: token!,
-      ssl: { rejectUnauthorized: false }, max: 1,
-    });
+const pool = new Pool({
+  host: endpoint, port: 5432, database: "postgres",
+  user: "admin", password: token,
+  ssl: { rejectUnauthorized: false }, max: 1,
+});
 const db = drizzle(pool);
 
 /* ── Seed data ─────────────────────────────────────────────────────────────── */
