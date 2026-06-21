@@ -69,23 +69,25 @@ export function SidebarNav({ user }: { user: User }) {
         {/* User */}
         <div className="px-4 py-4 border-t border-border flex-shrink-0">
           <div className="flex items-center gap-3">
-            {user?.image ? (
-              <img
-                src={user.image}
-                alt=""
-                className="w-7 h-7 rounded-full border border-border flex-shrink-0"
-              />
-            ) : (
-              <div className="w-7 h-7 rounded-full bg-teal/15 border border-teal/25 flex items-center justify-center flex-shrink-0">
-                <span className="text-teal text-xs font-bold">{initials}</span>
+            <Link href="/settings" className="flex items-center gap-3 flex-1 min-w-0 group" title="Settings">
+              {user?.image ? (
+                <img
+                  src={user.image}
+                  alt=""
+                  className="w-7 h-7 rounded-full border border-border flex-shrink-0"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-teal/15 border border-teal/25 flex items-center justify-center flex-shrink-0">
+                  <span className="text-teal text-xs font-bold">{initials}</span>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-body text-ink truncate leading-snug group-hover:text-teal transition-colors">{user?.name}</p>
+                <p className="text-xs font-body text-ink-3 truncate leading-snug" style={{ fontSize: "0.65rem" }}>
+                  {user?.email}
+                </p>
               </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-body text-ink truncate leading-snug">{user?.name}</p>
-              <p className="text-xs font-body text-ink-3 truncate leading-snug" style={{ fontSize: "0.65rem" }}>
-                {user?.email}
-              </p>
-            </div>
+            </Link>
             <NotificationBell />
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
@@ -122,9 +124,11 @@ export function SidebarNav({ user }: { user: User }) {
         <div className="flex flex-col items-center gap-1 px-3 py-1">
           <NotificationBell />
         </div>
-        <button
-          onClick={() => signOut({ callbackUrl: "/" })}
-          className="flex flex-col items-center gap-1 px-3 py-1 rounded-lg text-ink-3 transition-colors"
+        <Link
+          href="/settings"
+          className={`flex flex-col items-center gap-1 px-3 py-1 rounded-lg transition-colors ${
+            pathname === "/settings" ? "text-teal" : "text-ink-3"
+          }`}
         >
           {user?.image ? (
             <img src={user.image} alt="" className="w-6 h-6 rounded-full border border-border" />
@@ -134,7 +138,7 @@ export function SidebarNav({ user }: { user: User }) {
             </div>
           )}
           <span className="font-body uppercase tracking-widest" style={{ fontSize: "0.6rem" }}>You</span>
-        </button>
+        </Link>
       </nav>
     </>
   );

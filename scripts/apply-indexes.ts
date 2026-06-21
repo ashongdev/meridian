@@ -43,6 +43,8 @@ const indexes = [
   "CREATE INDEX ASYNC IF NOT EXISTS group_messages_group_created_idx ON group_messages (group_id, created_at)",
   // ai_sessions
   "CREATE INDEX ASYNC IF NOT EXISTS ai_sessions_user_course_idx ON ai_sessions (user_id, course_id)",
+  // promo_redemptions
+  "CREATE INDEX ASYNC IF NOT EXISTS promo_redemptions_user_code_idx ON promo_redemptions (user_id, promo_code_id)",
   // upvotes
   "CREATE INDEX ASYNC IF NOT EXISTS upvotes_user_target_idx ON upvotes (user_id, target_id, target_type)",
 ];

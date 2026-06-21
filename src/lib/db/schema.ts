@@ -166,6 +166,17 @@ export const promoCodes = pgTable("promo_codes", {
   createdAt:    now(),
 });
 
+/* ── Promo redemptions ────────────────────────────────────────────────────── */
+// One row per (user, promoCode) — checked app-level before insert (same
+// idempotency pattern as course_memberships/study_group_members) to stop a
+// user from repeatedly redeeming the same limited-use code.
+export const promoRedemptions = pgTable("promo_redemptions", {
+  id:          uuid("id").defaultRandom().primaryKey(),
+  userId:      uuid("user_id").notNull(),
+  promoCodeId: uuid("promo_code_id").notNull(),
+  createdAt:   now(),
+});
+
 /* ── Upvotes ──────────────────────────────────────────────────────────────── */
 export const upvotes = pgTable("upvotes", {
   id:         uuid("id").defaultRandom().primaryKey(),

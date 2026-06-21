@@ -15,6 +15,13 @@
       "when": 1781817468497,
       "tag": "0001_tough_forgotten_one",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782070381797,
+      "tag": "0002_spicy_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

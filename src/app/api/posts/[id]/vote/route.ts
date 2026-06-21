@@ -1,9 +1,11 @@
 import { auth } from "@/lib/auth/config";
 import { db, ensureDb } from "@/lib/db/aurora-dsql";
-import { posts, upvotes } from "@/lib/db/schema";
+import { posts, upvotes, users } from "@/lib/db/schema";
 import { rateLimit } from "@/lib/rate-limit";
 import { and, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+
+const KARMA_PER_UPVOTE = 1;
 
 // POST /api/posts/[id]/vote — toggle upvote
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -24,11 +26,15 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const { id: postId } = await params;
 
   try {
-    const [post] = await db.select({ id: posts.id, upvoteCount: posts.upvoteCount })
+    const [post] = await db.select({ id: posts.id, upvoteCount: posts.upvoteCount, authorId: posts.authorId })
       .from(posts).where(eq(posts.id, postId)).limit(1);
     if (!post) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
+
+    // Self-votes don't grant karma — the upvotes table already allows only one
+    // vote per user per post, so this just prevents the single trivial self-farm.
+    const awardsKarma = post.authorId && post.authorId !== userId;
 
     const [existing] = await db.select({ id: upvotes.id })
       .from(upvotes)
@@ -40,12 +46,22 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       await db.update(posts)
         .set({ upvoteCount: sql`greatest(${posts.upvoteCount} - 1, 0)` })
         .where(eq(posts.id, postId));
+      if (awardsKarma) {
+        await db.update(users)
+          .set({ karmaScore: sql`greatest(${users.karmaScore} - ${KARMA_PER_UPVOTE}, 0)` })
+          .where(eq(users.id, post.authorId!));
+      }
       return NextResponse.json({ data: { voted: false, count: Math.max(post.upvoteCount - 1, 0) } });
     } else {
       await db.insert(upvotes).values({ userId, targetType: "post", targetId: postId });
       await db.update(posts)
         .set({ upvoteCount: sql`${posts.upvoteCount} + 1` })
         .where(eq(posts.id, postId));
+      if (awardsKarma) {
+        await db.update(users)
+          .set({ karmaScore: sql`${users.karmaScore} + ${KARMA_PER_UPVOTE}` })
+          .where(eq(users.id, post.authorId!));
+      }
       return NextResponse.json({ data: { voted: true, count: post.upvoteCount + 1 } });
     }
   } catch (err) {
